@@ -24,45 +24,16 @@ def is_hiragana(s):
 def parse_line(line):
     words = kytea.getTags(line)
 
-    yield '__BOS__', '__BOS__'  # BOS
-
-    # 連続する平仮名エントリーを、連結する。
-    hiragana_queue = []
-
-    for word in words:
-        kanji = word.surface
-        yomi = word.tag[1][0][0]
-        if is_hiragana(kanji):
-            hiragana_queue.append(kanji)
-        else:
-            if len(hiragana_queue) > 0:
-                kana = ''.join(hiragana_queue)
-                hiragana_queue = []
-                yield kana, kana
-            if kanji == ' ':
-                # 空白のみのアイテムは無視してよさそう。
-                continue
-            yield kanji, yomi
-
-    if len(hiragana_queue) > 0:
-        kana = ''.join(hiragana_queue)
-        yield kana, kana
-
-    yield '__EOS__', '__EOS__'  # EOS
-
-
-def parse_line_simple(line):
-    words = kytea.getTags(line)
-
     yield '__BOS__', '__BOS__'
 
     for word in words:
         kanji = word.surface
+        hinshi = word.tag[0][0][0]
         yomi = word.tag[1][0][0]
         if kanji == ' ':
             # 空白のみのアイテムは無視してよさそう。
             continue
-        yield kanji, yomi
+        yield kanji, hinshi, yomi
 
     yield '__EOS__', '__EOS__'  # EOS
 
@@ -71,7 +42,7 @@ def process_files(files):
     count = 0
     total = len(files)
     for ifile in files:
-        ofile = ifile.replace('work/extracted/', 'work/text/')
+        ofile = ifile.replace('work/extracted/', 'work/annotated/')
 
         pathlib.Path(ofile).parent.mkdir(parents=True, exist_ok=True)
 
@@ -100,7 +71,7 @@ def process_files(files):
                 if len(line) == 0:
                     continue
 
-                wfp.write(' '.join([x[0] + '/' + x[1] for x in parse_line_simple(line)]) + "\n")
+                wfp.write(' '.join(['/'.join(x) for x in parse_line(line)]) + "\n")
         count += 1
 
 
