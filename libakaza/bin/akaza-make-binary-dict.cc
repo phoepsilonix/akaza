@@ -6,12 +6,12 @@
 #include <vector>
 
 #include <marisa.h>
-#include "../src/binary_dict.h"
+#include "../include/akaza.h"
 
 static std::vector<std::string> split(const std::string &s) {
     std::vector<std::string> elems;
     std::stringstream ss(s);
-    size_t n = s.find_first_of(" ");
+    size_t n = s.find_first_of(' ');
     if (n == std::string::npos) {
         return elems;
     }
@@ -20,13 +20,14 @@ static std::vector<std::string> split(const std::string &s) {
     return elems;
 }
 
-void make_system_dict(std::string ifname, std::string ofname) {
+static void make_binary_dict(const std::string& ifname, const std::string& ofname) {
     std::cout << "[100_effective_dict.cc] " << ifname << std::endl;
 
     std::ifstream ifs(ifname, std::ifstream::in);
 
     std::string buffer;
     std::vector<std::tuple<std::string, std::string>> set;
+    akaza::BinaryDict builder;
 
     while (std::getline(ifs, buffer)) {
         auto data = split(buffer);
@@ -37,16 +38,16 @@ void make_system_dict(std::string ifname, std::string ofname) {
         auto word = data[0];
         auto kanjis = data[1];
 
-        set.push_back(std::make_tuple(word, kanjis));
+        set.emplace_back(word, kanjis);
     }
 
-    akaza::BinaryDict dict;
-    dict.build(set);
-    dict.save(ofname);
+    builder.build(set);
+    builder.save(ofname);
 }
 
-int main() {
-    make_system_dict("work/jawiki.system_dict.txt", "akaza_data/data/system_dict.trie");
-    make_system_dict("work/jawiki.single_term.txt", "akaza_data/data/single_term.trie");
+int main(int argc, char** argv) {
+    const char * txtfile = argv[1];
+    const char * triefile = argv[2];
+    make_binary_dict(txtfile, triefile);
     return 0;
 }
