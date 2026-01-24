@@ -187,8 +187,7 @@ impl GraphResolver {
             return;
         }
 
-        let Some(targets) = lattice
-            .node_list(end_pos) else {
+        let Some(targets) = lattice.node_list(end_pos) else {
             // 直前のノードはない場合ある。
             return;
         };
