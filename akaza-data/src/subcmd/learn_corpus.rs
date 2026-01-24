@@ -213,19 +213,16 @@ impl LearningService {
             // Unknown word_id が一種類出ます。が、なぜ出るのか不明。
             // 一個ぐらいのデータがロストしてもここでは問題がないので後回し。
 
-            let Some(word1) = src_wordid2key
-                .get(&word_id1) else {
+            let Some(word1) = src_wordid2key.get(&word_id1) else {
                 info!("Unknown word_id: {}", word_id1);
                 continue;
             };
-            let Some((new_word_id1, _)) = new_unigram
-                .find(word1) else {
+            let Some((new_word_id1, _)) = new_unigram.find(word1) else {
                 info!("Unknown word: {}", word1);
                 continue;
             };
 
-            let Some(word2) = src_wordid2key
-                .get(&word_id2) else {
+            let Some(word2) = src_wordid2key.get(&word_id2) else {
                 info!("Unknown word_id: {}", word_id2);
                 continue;
             };
