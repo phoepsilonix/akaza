@@ -1,7 +1,5 @@
 #![allow(dead_code)]
 
-extern crate core;
-
 pub mod config;
 pub mod consonant;
 pub mod corpus;

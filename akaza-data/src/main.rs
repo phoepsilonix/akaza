@@ -1,5 +1,3 @@
-extern crate core;
-
 use std::io::Write;
 
 use clap::{Parser, Subcommand};
