@@ -1,7 +1,5 @@
 #![allow(non_upper_case_globals)]
 
-extern crate alloc;
-
 use std::ffi::{c_char, c_void, CStr};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;

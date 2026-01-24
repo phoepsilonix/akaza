@@ -1,5 +1,3 @@
-extern crate cc;
-
 use std::io::Read;
 use std::process::{Command, Stdio};
 
