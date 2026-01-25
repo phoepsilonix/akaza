@@ -9,7 +9,7 @@ use gtk::glib::signal::Inhibit;
 use gtk::prelude::*;
 use gtk::{Application, ApplicationWindow, Button, ListStore};
 use gtk4 as gtk;
-use gtk4::builders::MessageDialogBuilder;
+use gtk4::MessageDialog;
 use gtk4::gio::ApplicationFlags;
 use gtk4::glib::Type;
 
