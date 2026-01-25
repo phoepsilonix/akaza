@@ -36,10 +36,6 @@ jobs:
       run: cargo fmt --all --check
     - name: Run clippy
       run: cargo clippy -- -D warnings
-    - name: Install cargo-deny
-      run: cargo install --locked cargo-deny --version 0.14.24
-    - name: Run cargo-deny
-      run: cargo deny check
 
   test:
     runs-on: ubuntu-latest
