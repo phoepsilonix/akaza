@@ -66,7 +66,7 @@ impl Segmenter {
                 for force_range in force_ranges {
                     trace!(
                         "force_range detected: {}",
-                        yomi[force_range.start..force_range.end].to_string()
+                        &yomi[force_range.start..force_range.end]
                     );
                 }
             }
