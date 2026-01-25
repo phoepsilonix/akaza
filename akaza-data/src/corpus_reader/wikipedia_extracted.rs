@@ -21,7 +21,7 @@ impl ExtractedWikipediaProcessor {
 
         // 上級個人情報保護士（じょうきゅうこじんじょうほうほごし）は、財団法人全日本情報学習振興協会が設けている民間資格の称号。
         // → 上級個人情報保護士は、財団法人全日本情報学習振興協会が設けている民間資格の称号。
-        let yomigana_pattern = Regex::new(r#"[（\(][\u3041-\u309F、]+[）)]"#)?;
+        let yomigana_pattern = Regex::new(r"[（\(][\u3041-\u309F、]+[）)]")?;
 
         Ok(ExtractedWikipediaProcessor {
             alnum_pattern,
