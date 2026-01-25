@@ -60,10 +60,10 @@ impl PropController {
                 g_object_ref_sink(ibus_prop_list_new() as gpointer) as *mut IBusPropList;
 
             let input_mode_prop = g_object_ref_sink(ibus_property_new(
-                "InputMode\0".as_ptr() as *const gchar,
+                c"InputMode".as_ptr() as *const gchar,
                 IBusPropType_PROP_TYPE_MENU,
                 format!("入力モード: {}", initial_input_mode.symbol).to_ibus_text(),
-                "\0".as_ptr() as *const gchar,
+                c"".as_ptr() as *const gchar,
                 "Switch input mode".to_ibus_text(),
                 to_gboolean(true),
                 to_gboolean(true),
@@ -79,7 +79,7 @@ impl PropController {
                     (input_mode.prop_name.to_string() + "\0").as_ptr() as *const gchar,
                     IBusPropType_PROP_TYPE_RADIO,
                     input_mode.label.to_ibus_text(),
-                    "\0".as_ptr() as *const gchar,
+                    c"".as_ptr() as *const gchar,
                     std::ptr::null_mut() as *mut IBusText,
                     to_gboolean(true),
                     to_gboolean(true),
@@ -107,10 +107,10 @@ impl PropController {
 
     unsafe fn build_user_dict(prop_list: *mut IBusPropList, config: Config) -> Result<()> {
         let user_dict_prop = g_object_ref_sink(ibus_property_new(
-            "UserDict\0".as_ptr() as *const gchar,
+            c"UserDict".as_ptr() as *const gchar,
             IBusPropType_PROP_TYPE_MENU,
             "ユーザー辞書".to_ibus_text(),
-            "\0".as_ptr() as *const gchar,
+            c"".as_ptr() as *const gchar,
             "User dict".to_ibus_text(),
             to_gboolean(true),
             to_gboolean(true),
@@ -129,7 +129,7 @@ impl PropController {
                     .unwrap()
                     .to_string_lossy()
                     .to_ibus_text(),
-                "\0".as_ptr() as *const gchar,
+                c"".as_ptr() as *const gchar,
                 std::ptr::null_mut() as *mut IBusText,
                 to_gboolean(true),
                 to_gboolean(true),
@@ -159,10 +159,10 @@ impl PropController {
 
     unsafe fn build_preference_menu(prop_list: *mut IBusPropList) {
         let preference_prop = g_object_ref_sink(ibus_property_new(
-            "PrefPane\0".as_ptr() as *const gchar,
+            c"PrefPane".as_ptr() as *const gchar,
             IBusPropType_PROP_TYPE_MENU,
             "設定".to_ibus_text(),
-            "\0".as_ptr() as *const gchar,
+            c"".as_ptr() as *const gchar,
             "Preference".to_ibus_text(),
             to_gboolean(true),
             to_gboolean(true),
