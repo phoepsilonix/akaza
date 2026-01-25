@@ -1,13 +1,20 @@
 [licenses]
-allow-osi-fsf-free = "either"
-copyleft = "deny"
+version = 2
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "MPL-2.0",
+    "Unlicense",
+    "Unicode-DFS-2016",
+]
 
 [advisories]
+version = 2
 ignore = [
     "RUSTSEC-2020-0071", # chrono 経由の依存で、chrono では該当 API つかってない https://github.com/chronotope/chrono/blob/main/deny.toml
     "RUSTSEC-2021-0145", # atty: dev deps
 ]
-
-unmaintained = "deny"
-unsound = "deny"
-yanked = "deny"
