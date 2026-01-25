@@ -253,7 +253,7 @@ fn build_add_user_dict_btn(dict_list_grid: Grid, config: Arc<Mutex<Config>>) -> 
                     window.close();
                 }
                 Err(err) => {
-                    let dialog = MessageDialogBuilder::new()
+                    let dialog = MessageDialog::builder()
                         .message_type(MessageType::Error)
                         .text(&format!("Error: {err}"))
                         .build();
