@@ -63,7 +63,7 @@ fn add_row(grid: &Grid, dict_config: &DictConfig, config: &Arc<Mutex<Config>>, i
 
     {
         let cbt = ComboBoxText::builder().build();
-        for usage in vec![
+        for usage in [
             DictUsage::Normal,
             DictUsage::SingleTerm,
             DictUsage::Disabled,
@@ -104,7 +104,7 @@ fn add_row(grid: &Grid, dict_config: &DictConfig, config: &Arc<Mutex<Config>>, i
     );
     {
         let cbt = ComboBoxText::builder().build();
-        for encoding in vec![DictEncoding::EucJp, DictEncoding::Utf8] {
+        for encoding in [DictEncoding::EucJp, DictEncoding::Utf8] {
             cbt.append(
                 Some(&encoding.to_string()),
                 encoding.as_str().replace('_', "-").as_str(),
