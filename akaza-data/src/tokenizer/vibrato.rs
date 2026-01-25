@@ -125,7 +125,7 @@ mod tests {
 
     #[test]
     fn test_with_kana() -> anyhow::Result<()> {
-        let dict_path = "akaza-data/work/vibrato/ipadic-mecab-2_7_0/system.dic";
+        let dict_path = "work/vibrato/ipadic-mecab-2_7_0/system.dic";
         let runner = VibratoTokenizer::new(dict_path, None)
             .with_context(|| format!("Failed to load dictionary from: {}", dict_path))?;
         let got = runner.tokenize("私の名前は中野です。", true)?;
@@ -138,22 +138,7 @@ mod tests {
 
     #[test]
     fn test() -> anyhow::Result<()> {
-        // Debug: show current directory and file existence
-        eprintln!("Current dir: {:?}", std::env::current_dir()?);
-        let dict_path = "akaza-data/work/vibrato/ipadic-mecab-2_7_0/system.dic";
-        eprintln!("Looking for: {}", dict_path);
-        eprintln!("File exists: {}", std::path::Path::new(dict_path).exists());
-
-        // Check parent directories
-        if let Ok(entries) = std::fs::read_dir("akaza-data/work/vibrato") {
-            eprintln!("Contents of akaza-data/work/vibrato:");
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    eprintln!("  - {:?}", entry.path());
-                }
-            }
-        }
-
+        let dict_path = "work/vibrato/ipadic-mecab-2_7_0/system.dic";
         let runner = VibratoTokenizer::new(dict_path, None)
             .with_context(|| format!("Failed to load dictionary from: {}", dict_path))?;
         runner.tokenize("私の名前は中野です。", false)?;
@@ -178,7 +163,7 @@ mod tests {
             .is_test(true)
             .try_init();
 
-        let dict_path = "akaza-data/work/vibrato/ipadic-mecab-2_7_0/system.dic";
+        let dict_path = "work/vibrato/ipadic-mecab-2_7_0/system.dic";
         let runner = VibratoTokenizer::new(dict_path, None)
             .with_context(|| format!("Failed to load dictionary from: {}", dict_path))?;
         assert_eq!(
@@ -209,7 +194,7 @@ mod tests {
             .is_test(true)
             .try_init();
 
-        let dict_path = "akaza-data/work/vibrato/ipadic-mecab-2_7_0/system.dic";
+        let dict_path = "work/vibrato/ipadic-mecab-2_7_0/system.dic";
         let runner = VibratoTokenizer::new(dict_path, None)
             .with_context(|| format!("Failed to load dictionary from: {}", dict_path))?;
         assert_eq!(runner.tokenize("井伊家", false)?, "井伊家/いいけ");
