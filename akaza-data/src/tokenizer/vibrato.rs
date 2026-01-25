@@ -125,7 +125,9 @@ mod tests {
 
     #[test]
     fn test_with_kana() -> anyhow::Result<()> {
-        let runner = VibratoTokenizer::new("akaza-data/work/vibrato/ipadic-mecab-2_7_0/system.dic", None)?;
+        let dict_path = "akaza-data/work/vibrato/ipadic-mecab-2_7_0/system.dic";
+        let runner = VibratoTokenizer::new(dict_path, None)
+            .with_context(|| format!("Failed to load dictionary from: {}", dict_path))?;
         let got = runner.tokenize("私の名前は中野です。", true)?;
         assert_eq!(
             got,
@@ -136,7 +138,9 @@ mod tests {
 
     #[test]
     fn test() -> anyhow::Result<()> {
-        let runner = VibratoTokenizer::new("akaza-data/work/vibrato/ipadic-mecab-2_7_0/system.dic", None)?;
+        let dict_path = "akaza-data/work/vibrato/ipadic-mecab-2_7_0/system.dic";
+        let runner = VibratoTokenizer::new(dict_path, None)
+            .with_context(|| format!("Failed to load dictionary from: {}", dict_path))?;
         runner.tokenize("私の名前は中野です。", false)?;
         Ok(())
     }
@@ -159,7 +163,9 @@ mod tests {
             .is_test(true)
             .try_init();
 
-        let runner = VibratoTokenizer::new("akaza-data/work/vibrato/ipadic-mecab-2_7_0/system.dic", None)?;
+        let dict_path = "akaza-data/work/vibrato/ipadic-mecab-2_7_0/system.dic";
+        let runner = VibratoTokenizer::new(dict_path, None)
+            .with_context(|| format!("Failed to load dictionary from: {}", dict_path))?;
         assert_eq!(
             runner.tokenize("書いていたものである", false)?,
             "書いて/かいて いた/いた もの/もの である/である"
@@ -188,7 +194,9 @@ mod tests {
             .is_test(true)
             .try_init();
 
-        let runner = VibratoTokenizer::new("akaza-data/work/vibrato/ipadic-mecab-2_7_0/system.dic", None)?;
+        let dict_path = "akaza-data/work/vibrato/ipadic-mecab-2_7_0/system.dic";
+        let runner = VibratoTokenizer::new(dict_path, None)
+            .with_context(|| format!("Failed to load dictionary from: {}", dict_path))?;
         assert_eq!(runner.tokenize("井伊家", false)?, "井伊家/いいけ");
         Ok(())
     }
