@@ -30,7 +30,7 @@ jobs:
         cd ibus-akaza/ && make
     - uses: dtolnay/rust-toolchain@master
       with:
-          toolchain: "1.69.0"
+          toolchain: "1.70.0"
           components: clippy, rustfmt
     - name: Check formatting
       run: cargo fmt --all --check
@@ -63,6 +63,6 @@ jobs:
         cd ibus-akaza/ && make
     - uses: dtolnay/rust-toolchain@master
       with:
-          toolchain: "1.69.0"
+          toolchain: "1.70.0"
     - name: Run tests
       run: cargo test
