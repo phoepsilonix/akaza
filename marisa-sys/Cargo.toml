@@ -8,7 +8,7 @@ license = "MIT"
 
 [dependencies]
 tempfile = "3"
-anyhow = "1.0.68"
+anyhow = "1.0"
 
 [build-dependencies]
-cc = "1.0.78"
+cc = "1.0"
