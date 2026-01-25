@@ -8,6 +8,7 @@ license = "MIT"
 
 [dependencies]
 tempfile = "3"
+time = "0.3.35"
 anyhow = "1.0.68"
 log = "0.4.17"
 libakaza = { path = "../libakaza" }
