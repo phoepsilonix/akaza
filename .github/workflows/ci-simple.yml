@@ -7,8 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
-
+  lint:
     runs-on: ubuntu-latest
 
     steps:
@@ -21,7 +20,46 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           target
-        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ runner.os }}-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install ibus libgirepository1.0-dev libmarisa-dev clang libibus-1.0-dev unzip libgtk-4-dev
+    - name: make some configuration files for ibus-akaza
+      run: |
+        cd ibus-akaza/ && make
+    - uses: dtolnay/rust-toolchain@master
+      with:
+          toolchain: "1.81.0"
+          components: clippy, rustfmt
+    - name: Check formatting
+      run: cargo fmt --all --check
+    - name: Run clippy
+      run: cargo clippy -- -D warnings
+
+  cargo-deny:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: true
+    - uses: EmbarkStudios/cargo-deny-action@v1
+
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: true
+    - uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          target
+        key: ${{ runner.os }}-cargo-test-${{ hashFiles('**/Cargo.lock') }}
     - name: Install dependencies
       run: |
         sudo apt-get update
@@ -32,12 +70,8 @@ jobs:
     - name: make some configuration files for ibus-akaza
       run: |
         cd ibus-akaza/ && make
-    - uses: dtolnay/rust-toolchain@stable
+    - uses: dtolnay/rust-toolchain@master
       with:
-          components: clippy, rustfmt
-    - run: cargo fmt --all --check
-    - run: cargo clippy -- -D warnings
-    - run: cargo test
-    - run: cargo install --locked cargo-deny
-    - run: cargo deny check
-
+          toolchain: "1.81.0"
+    - name: Run tests
+      run: cargo test
