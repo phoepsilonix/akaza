@@ -122,9 +122,7 @@ mod system_dict {
             HashMap::new(),
             |mut acc: HashMap<String, Vec<String>>, t: &(String, String)| {
                 let (p, q) = t;
-                acc.entry(p.to_string())
-                    .or_insert_with(Vec::new)
-                    .push(q.to_string());
+                acc.entry(p.to_string()).or_default().push(q.to_string());
                 acc
             },
         )
@@ -160,7 +158,7 @@ mod system_dict {
     fn make_unidic_dict(path: String) -> anyhow::Result<HashMap<String, Vec<String>>> {
         let file = File::open(path)?;
         let mut dict = HashMap::new();
-        let katakana_pattern = Regex::new(r#"^\p{wb=Katakana}+"#)?;
+        let katakana_pattern = Regex::new(r"^\p{wb=Katakana}+")?;
         for line in BufReader::new(file).lines() {
             let line = line?;
             let csv = line.split(',').collect::<Vec<_>>();
