@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use encoding_rs::UTF_8;
-use gtk::glib::signal::Inhibit;
+use gtk::glib::Propagation;
 use gtk::prelude::*;
 use gtk::{Application, ApplicationWindow, Button, ListStore};
 use gtk4 as gtk;
@@ -149,7 +149,7 @@ fn connect_activate(
         if let Some(application) = window.application() {
             application.remove_window(window);
         }
-        Inhibit(false)
+        Propagation::Proceed
     });
 
     window.show();

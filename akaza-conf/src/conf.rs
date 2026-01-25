@@ -2,7 +2,7 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use gtk::glib::signal::Inhibit;
+use gtk::glib::Propagation;
 use gtk::prelude::*;
 use gtk::{Application, ApplicationWindow, Button, Label, Notebook};
 use gtk4 as gtk;
@@ -106,7 +106,7 @@ fn connect_activate(app: &Application, config: Arc<Mutex<Config>>) -> Result<()>
         if let Some(application) = window.application() {
             application.remove_window(window);
         }
-        Inhibit(false)
+        Propagation::Proceed
     });
 
     window.show();
