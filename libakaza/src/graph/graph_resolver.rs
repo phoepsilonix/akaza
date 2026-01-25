@@ -262,7 +262,7 @@ impl Eq for BreakDown {}
 
 impl PartialOrd<Self> for BreakDown {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        (self.head_cost + self.tail_cost).partial_cmp(&(other.head_cost + other.tail_cost))
+        Some(self.cmp(other))
     }
 }
 
