@@ -153,8 +153,6 @@ fn add_row(grid: &Grid, dict_config: &DictConfig, config: &Arc<Mutex<Config>>, i
 
 fn build_add_system_dict_btn(config: Arc<Mutex<Config>>, grid: Grid) -> Button {
     let add_btn = Button::with_label("システム辞書の追加");
-    let config = config;
-    let grid = grid;
     add_btn.connect_clicked(move |_| {
         let dialog = FileChooserDialog::new(
             Some("辞書の選択"),
@@ -210,8 +208,6 @@ fn build_add_system_dict_btn(config: Arc<Mutex<Config>>, grid: Grid) -> Button {
 
 fn build_add_user_dict_btn(dict_list_grid: Grid, config: Arc<Mutex<Config>>) -> Button {
     let add_btn = Button::with_label("ユーザー辞書の追加");
-    let config = config;
-    let dict_list_grid = dict_list_grid;
     add_btn.connect_clicked(move |_| {
         let window = Window::builder()
             .title("ユーザー辞書の追加")
