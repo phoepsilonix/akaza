@@ -1,2 +1,3 @@
 [workspace]
+resolver = "2"
 members = ["libakaza", "marisa-sys", "ibus-akaza", "ibus-sys", "akaza-data", "akaza-conf", "akaza-dict"]
