@@ -45,7 +45,7 @@ pub struct Segmenter {
 impl Segmenter {
     pub fn new(tries: Vec<Arc<Mutex<dyn KanaTrie>>>) -> Segmenter {
         info!("Registering tries for Segmenter: {}", tries.len());
-        let number_pattern = Regex::new(r#"^(?:0|[1-9][0-9]*)(\.[0-9]*)?"#).unwrap();
+        let number_pattern = Regex::new(r"^(?:0|[1-9][0-9]*)(\.[0-9]*)?").unwrap();
         Segmenter {
             tries,
             number_pattern,
