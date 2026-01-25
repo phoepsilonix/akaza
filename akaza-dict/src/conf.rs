@@ -125,7 +125,7 @@ fn connect_activate(
             }
 
             if let Err(err) = write_skk_dict(&(user_dict_path.to_string() + ".tmp"), vec![dict]) {
-                let dialog = MessageDialogBuilder::new()
+                let dialog = MessageDialog::builder()
                     .message_type(MessageType::Error)
                     .text(&format!("Error: {err}"))
                     .build();
@@ -133,7 +133,7 @@ fn connect_activate(
             }
             info!("Renaming file");
             if let Err(err) = fs::rename(user_dict_path.to_string() + ".tmp", &user_dict_path) {
-                let dialog = MessageDialogBuilder::new()
+                let dialog = MessageDialog::builder()
                     .message_type(MessageType::Error)
                     .text(&format!("Error: {err}"))
                     .build();
