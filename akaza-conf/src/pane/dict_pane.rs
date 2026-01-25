@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use gtk4::builders::MessageDialogBuilder;
 use gtk4::prelude::ButtonExt;
 use gtk4::prelude::ComboBoxExt;
 use gtk4::prelude::DialogExt;
@@ -12,6 +11,7 @@ use gtk4::prelude::FileExt;
 use gtk4::prelude::GridExt;
 use gtk4::prelude::GtkWindowExt;
 use gtk4::prelude::WidgetExt;
+use gtk4::MessageDialog;
 use gtk4::{
     Button, ComboBoxText, FileChooserAction, FileChooserDialog, Grid, Label, MessageType,
     ResponseType, ScrolledWindow, Text, TextBuffer, TextView, Window,
@@ -253,9 +253,9 @@ fn build_add_user_dict_btn(dict_list_grid: Grid, config: Arc<Mutex<Config>>) -> 
                     window.close();
                 }
                 Err(err) => {
-                    let dialog = MessageDialogBuilder::new()
+                    let dialog = MessageDialog::builder()
                         .message_type(MessageType::Error)
-                        .text(&format!("Error: {err}"))
+                        .text(format!("Error: {err}"))
                         .build();
                     dialog.show();
                 }
