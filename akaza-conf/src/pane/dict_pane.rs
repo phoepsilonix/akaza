@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use gtk4::builders::MessageDialogBuilder;
+use gtk4::MessageDialog;
 use gtk4::prelude::ButtonExt;
 use gtk4::prelude::ComboBoxExt;
 use gtk4::prelude::DialogExt;
