@@ -200,8 +200,7 @@ fn main() -> anyhow::Result<()> {
                 "{}: {:?}: {}: {}",
                 ts,
                 std::thread::current().id(),
-                buf.default_level_style(record.level())
-                    .value(record.level()),
+                record.level(),
                 record.args()
             )
         })
