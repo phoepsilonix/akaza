@@ -45,7 +45,7 @@ impl<U: SystemUnigramLM, B: SystemBigramLM> LatticeGraph<U, B> {
     }
 
     pub(crate) fn get(&self, n: i32) -> Option<&Vec<WordNode>> {
-        return self.graph.get(&n);
+        self.graph.get(&n)
     }
 
     // for debugging purpose
