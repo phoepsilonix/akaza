@@ -77,7 +77,7 @@ fn add_row(grid: &Grid, dict_config: &DictConfig, config: &Arc<Mutex<Config>>, i
             cbt.connect_changed(move |f| {
                 if let Some(id) = f.active_id() {
                     let mut config = config.lock().unwrap();
-                    for mut dict in &mut config.engine.dicts {
+                    for dict in &mut config.engine.dicts {
                         if dict.path == path {
                             dict.usage = DictUsage::from(&id).unwrap();
                             return;
@@ -117,7 +117,7 @@ fn add_row(grid: &Grid, dict_config: &DictConfig, config: &Arc<Mutex<Config>>, i
             cbt.connect_changed(move |f| {
                 if let Some(id) = f.active_id() {
                     let mut config = config.lock().unwrap();
-                    for mut dict in &mut config.engine.dicts {
+                    for dict in &mut config.engine.dicts {
                         if dict.path == path {
                             dict.encoding = DictEncoding::from(&id).unwrap();
                             break;
