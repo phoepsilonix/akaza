@@ -160,7 +160,7 @@ mod system_dict {
     fn make_unidic_dict(path: String) -> anyhow::Result<HashMap<String, Vec<String>>> {
         let file = File::open(path)?;
         let mut dict = HashMap::new();
-        let katakana_pattern = Regex::new(r#"^\p{wb=Katakana}+"#)?;
+        let katakana_pattern = Regex::new(r"^\p{wb=Katakana}+")?;
         for line in BufReader::new(file).lines() {
             let line = line?;
             let csv = line.split(',').collect::<Vec<_>>();
