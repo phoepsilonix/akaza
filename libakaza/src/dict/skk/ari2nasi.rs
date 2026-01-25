@@ -342,7 +342,9 @@ impl Ari2Nasi {
                 let yomi_base = &kana[0..kana.len() - last_char.len_utf8()].to_string();
                 for boin in self.boin_map.keys() {
                     let Some(okuri) = self
-                        .roman_map.get((last_char.to_string() + boin.to_string().as_str()).as_str()) else {
+                        .roman_map
+                        .get((last_char.to_string() + boin.to_string().as_str()).as_str())
+                    else {
                         // "wu" のような、平仮名に変換できない不正なローマ字パターンを生成しているケースもある。
                         // そういう場合は、スキップ。
                         continue;
