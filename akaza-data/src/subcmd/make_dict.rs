@@ -123,7 +123,7 @@ mod system_dict {
             |mut acc: HashMap<String, Vec<String>>, t: &(String, String)| {
                 let (p, q) = t;
                 acc.entry(p.to_string())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(q.to_string());
                 acc
             },
