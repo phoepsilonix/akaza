@@ -11,11 +11,14 @@ allow = [
     "Unlicense",
     "Unicode-3.0",
     "Unicode-DFS-2016",
+    "Zlib",
 ]
 
 [advisories]
 version = 2
 ignore = [
-    "RUSTSEC-2020-0071", # chrono 経由の依存で、chrono では該当 API つかってない https://github.com/chronotope/chrono/blob/main/deny.toml
-    "RUSTSEC-2021-0145", # atty: dev deps
+    "RUSTSEC-2025-0141", # bincode: unmaintained, used by vibrato->rucrf
+    "RUSTSEC-2024-0384", # instant: unmaintained, used by vibrato->rucrf->argmin
+    "RUSTSEC-2024-0436", # paste: unmaintained, used by vibrato->rucrf->argmin
+    "RUSTSEC-2024-0370", # proc-macro-error: unmaintained, used by gtk4 dependencies
 ]
