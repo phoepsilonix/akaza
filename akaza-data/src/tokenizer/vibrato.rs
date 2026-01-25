@@ -138,7 +138,22 @@ mod tests {
 
     #[test]
     fn test() -> anyhow::Result<()> {
+        // Debug: show current directory and file existence
+        eprintln!("Current dir: {:?}", std::env::current_dir()?);
         let dict_path = "akaza-data/work/vibrato/ipadic-mecab-2_7_0/system.dic";
+        eprintln!("Looking for: {}", dict_path);
+        eprintln!("File exists: {}", std::path::Path::new(dict_path).exists());
+
+        // Check parent directories
+        if let Ok(entries) = std::fs::read_dir("akaza-data/work/vibrato") {
+            eprintln!("Contents of akaza-data/work/vibrato:");
+            for entry in entries {
+                if let Ok(entry) = entry {
+                    eprintln!("  - {:?}", entry.path());
+                }
+            }
+        }
+
         let runner = VibratoTokenizer::new(dict_path, None)
             .with_context(|| format!("Failed to load dictionary from: {}", dict_path))?;
         runner.tokenize("私の名前は中野です。", false)?;
