@@ -68,7 +68,7 @@ impl PropController {
                 to_gboolean(true),
                 to_gboolean(true),
                 IBusPropState_PROP_STATE_UNCHECKED,
-                std::ptr::null_mut() as *mut IBusPropList,
+                std::ptr::null_mut(),
             ) as gpointer) as *mut IBusProperty;
             ibus_prop_list_append(prop_list, input_mode_prop);
 
@@ -88,7 +88,7 @@ impl PropController {
                     } else {
                         IBusPropState_PROP_STATE_UNCHECKED
                     },
-                    std::ptr::null_mut() as *mut IBusPropList,
+                    std::ptr::null_mut(),
                 ) as gpointer) as *mut IBusProperty;
                 prop_map.insert(input_mode.prop_name.to_string(), prop);
                 ibus_prop_list_append(props, prop);
@@ -115,7 +115,7 @@ impl PropController {
             to_gboolean(true),
             to_gboolean(true),
             IBusPropState_PROP_STATE_UNCHECKED,
-            std::ptr::null_mut() as *mut IBusPropList,
+            std::ptr::null_mut(),
         ) as gpointer) as *mut IBusProperty;
         ibus_prop_list_append(prop_list, user_dict_prop);
 
@@ -134,7 +134,7 @@ impl PropController {
                 to_gboolean(true),
                 to_gboolean(true),
                 IBusPropState_PROP_STATE_UNCHECKED,
-                std::ptr::null_mut() as *mut IBusPropList,
+                std::ptr::null_mut(),
             ) as gpointer) as *mut IBusProperty;
             // prop_map.insert(input_mode.prop_name.to_string(), prop);
             ibus_prop_list_append(props, prop);
@@ -167,7 +167,7 @@ impl PropController {
             to_gboolean(true),
             to_gboolean(true),
             IBusPropState_PROP_STATE_UNCHECKED,
-            std::ptr::null_mut() as *mut IBusPropList,
+            std::ptr::null_mut(),
         ) as gpointer) as *mut IBusProperty;
         ibus_prop_list_append(prop_list, preference_prop);
     }
