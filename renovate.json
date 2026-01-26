@@ -10,8 +10,11 @@
   ],
   "timezone": "Asia/Tokyo",
   "schedule": [
-    "before 11am on monday"
+    "after 9pm and before 11am every weekday",
+    "every weekend"
   ],
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 5,
   "cargo": {
     "rangeStrategy": "bump"
   },
@@ -19,23 +22,33 @@
     "labels": [
       "security"
     ],
-    "assignees": []
+    "assignees": [],
+    "automerge": true
   },
   "packageRules": [
     {
       "matchManagers": ["cargo"],
-      "groupName": "Rust dependencies"
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash"
     },
     {
+      "matchManagers": ["cargo"],
       "matchUpdateTypes": ["major"],
       "labels": [
         "major-update"
       ]
     },
     {
-      "matchUpdateTypes": ["minor", "patch"],
-      "groupName": "all non-major dependencies",
-      "groupSlug": "all-minor-patch"
+      "matchManagers": ["github-actions"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "pinDigests": true
     }
   ]
 }
