@@ -10,7 +10,7 @@
   ],
   "timezone": "Asia/Tokyo",
   "schedule": [
-    "before 10am on monday"
+    "before 11am on monday"
   ],
   "cargo": {
     "rangeStrategy": "bump"
