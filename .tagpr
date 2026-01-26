@@ -1,0 +1,20 @@
+# tagpr configuration for akaza
+# see https://github.com/Songmu/tagpr
+
+[tagpr]
+  # Manage versions in all Cargo.toml files
+  versionFile = [
+    "akaza-conf/Cargo.toml",
+    "akaza-data/Cargo.toml",
+    "akaza-dict/Cargo.toml",
+    "ibus-akaza/Cargo.toml",
+    "ibus-sys/Cargo.toml",
+    "libakaza/Cargo.toml",
+    "marisa-sys/Cargo.toml",
+  ]
+  # Cargo.toml format
+  vPrefix = false
+  # Changelog file
+  changelog = true
+  # Command to run before tagging
+  command = "cargo update -w"
