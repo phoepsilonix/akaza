@@ -114,9 +114,10 @@ impl MarisaSystemUnigramLM {
     fn find_from_trie(trie: &Trie, word: &str) -> Option<(i32, f32)> {
         assert_ne!(word.len(), 0);
 
-        let key = format!("{}\u{ff}", word);
+        let mut key = word.as_bytes().to_vec();
+        key.push(0xff);
         let mut agent = Agent::new();
-        agent.set_query_str(&key);
+        agent.set_query_bytes(&key);
 
         if trie.predictive_search(&mut agent) {
             let word = agent.key().as_bytes();

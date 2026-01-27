@@ -110,9 +110,10 @@ impl SystemUnigramLM for WordcntUnigram {
     fn find(&self, word: &str) -> Option<(i32, f32)> {
         assert_ne!(word.len(), 0);
 
-        let key = format!("{}\u{ff}", word);
+        let mut key = word.as_bytes().to_vec();
+        key.push(0xff);
         let mut agent = Agent::new();
-        agent.set_query_str(&key);
+        agent.set_query_bytes(&key);
 
         if self.trie.predictive_search(&mut agent) {
             let word_bytes = agent.key().as_bytes();
