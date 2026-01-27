@@ -162,3 +162,191 @@ impl<U: SystemUnigramLM, B: SystemBigramLM> LatticeGraph<U, B> {
         self.system_bigram_lm.get_default_edge_cost()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::graph::candidate::Candidate;
+    use crate::graph::word_node::WordNode;
+    use crate::lm::system_bigram::MarisaSystemBigramLMBuilder;
+    use crate::lm::system_unigram_lm::MarisaSystemUnigramLMBuilder;
+
+    use super::*;
+
+    fn setup_test_graph() -> anyhow::Result<
+        LatticeGraph<
+            crate::lm::system_unigram_lm::MarisaSystemUnigramLM,
+            crate::lm::system_bigram::MarisaSystemBigramLM,
+        >,
+    > {
+        // システムunigram言語モデルを構築
+        let mut unigram_builder = MarisaSystemUnigramLMBuilder::default();
+        unigram_builder.add("私/わたし", 1.5);
+        unigram_builder.add("彼/かれ", 2.0);
+        unigram_builder.set_total_words(100);
+        unigram_builder.set_unique_words(50);
+        let system_unigram_lm = unigram_builder.build()?;
+
+        // システムbigram言語モデルを構築
+        let mut bigram_builder = MarisaSystemBigramLMBuilder::default();
+        bigram_builder.set_default_edge_cost(10.0);
+        let unigram_map = system_unigram_lm.as_hash_map();
+        let watashi_id = unigram_map.get("私/わたし").unwrap().0;
+        let kare_id = unigram_map.get("彼/かれ").unwrap().0;
+        bigram_builder.add(watashi_id, kare_id, 0.5);
+        let system_bigram_lm = bigram_builder.build()?;
+
+        // グラフを構築
+        let mut graph = BTreeMap::new();
+        graph.insert(0, vec![WordNode::create_bos()]);
+
+        // "わたし" のノード
+        let watashi_node = WordNode::new(
+            0,
+            "私",
+            "わたし",
+            Some((watashi_id, 1.5)),
+            false,
+        );
+        graph.insert(9, vec![watashi_node.clone()]);
+
+        // "かれ" のノード
+        let kare_node = WordNode::new(9, "彼", "かれ", Some((kare_id, 2.0)), false);
+        graph.insert(18, vec![kare_node.clone()]);
+
+        // "ひらがな" のノード（言語モデルにない）
+        let hiragana_node = WordNode::new(18, "ひらがな", "ひらがな", None, true);
+        graph.insert(30, vec![hiragana_node]);
+
+        graph.insert(31, vec![WordNode::create_eos(30)]);
+
+        Ok(LatticeGraph {
+            yomi: "わたしかれひらがな".to_string(),
+            graph,
+            user_data: Arc::new(Mutex::new(UserData::default())),
+            system_unigram_lm: Rc::new(system_unigram_lm),
+            system_bigram_lm: Rc::new(system_bigram_lm),
+        })
+    }
+
+    #[test]
+    fn test_get_node_cost_system_score() -> anyhow::Result<()> {
+        let graph = setup_test_graph()?;
+        let watashi_node = graph.node_list(9).unwrap().first().unwrap();
+
+        let cost = graph.get_node_cost(watashi_node);
+        assert_eq!(cost, 1.5); // システム辞書のスコア
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_node_cost_unknown_word() -> anyhow::Result<()> {
+        let graph = setup_test_graph()?;
+        let hiragana_node = graph.node_list(30).unwrap().first().unwrap();
+
+        let cost = graph.get_node_cost(hiragana_node);
+        // 言語モデルにない単語はデフォルトコスト
+        // ひらがなはsurface.len() >= yomi.len() なので get_cost(0)
+        let expected_cost = graph.system_unigram_lm.get_cost(0);
+        assert_eq!(cost, expected_cost);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_node_cost_user_score_priority() -> anyhow::Result<()> {
+        let graph = setup_test_graph()?;
+        let watashi_node = graph.node_list(9).unwrap().first().unwrap();
+
+        // ユーザースコアを記録
+        graph
+            .user_data
+            .lock()
+            .unwrap()
+            .record_entries(&[Candidate::new("わたし", "私", 0.1)]);
+
+        let cost = graph.get_node_cost(watashi_node);
+        // ユーザースコアが優先されることを確認（システムスコアより低いはず）
+        assert!(cost < 1.5); // システムスコアは1.5
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_edge_cost_system_bigram() -> anyhow::Result<()> {
+        let graph = setup_test_graph()?;
+        let watashi_node = graph.node_list(9).unwrap().first().unwrap();
+        let kare_node = graph.node_list(18).unwrap().first().unwrap();
+
+        let cost = graph.get_edge_cost(watashi_node, kare_node);
+        // bigram言語モデルに登録されているスコア
+        assert!(cost > 0.4 && cost < 0.6); // f16精度の誤差を考慮
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_edge_cost_default() -> anyhow::Result<()> {
+        let graph = setup_test_graph()?;
+        let kare_node = graph.node_list(18).unwrap().first().unwrap();
+        let hiragana_node = graph.node_list(30).unwrap().first().unwrap();
+
+        let cost = graph.get_edge_cost(kare_node, hiragana_node);
+        // 言語モデルに登録されていないエッジはデフォルトコスト
+        assert_eq!(cost, 10.0);
+
+        Ok(())
+    }
+
+    // TODO: ユーザーバイグラムスコアのテストを追加
+    // BiGramUserStats の API を直接使用する必要がある
+
+    #[test]
+    fn test_get_prev_nodes() -> anyhow::Result<()> {
+        let graph = setup_test_graph()?;
+        let kare_node = graph.node_list(18).unwrap().first().unwrap();
+
+        let prev_nodes = graph.get_prev_nodes(kare_node).unwrap();
+        assert_eq!(prev_nodes.len(), 1);
+        assert_eq!(prev_nodes[0].surface, "私");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_node_list() -> anyhow::Result<()> {
+        let graph = setup_test_graph()?;
+
+        assert!(graph.node_list(0).is_some()); // BOS
+        assert!(graph.node_list(9).is_some()); // わたし
+        assert!(graph.node_list(18).is_some()); // かれ
+        assert!(graph.node_list(30).is_some()); // ひらがな
+        assert!(graph.node_list(31).is_some()); // EOS
+        assert!(graph.node_list(100).is_none()); // 存在しない位置
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_node_cost_kanji_shortening_bonus() -> anyhow::Result<()> {
+        let _graph = setup_test_graph()?;
+
+        // 変換後のほうが短くなる単語を追加（漢字変換）
+        let mut graph_with_kanji = setup_test_graph()?;
+        let kanji_node = WordNode::new(
+            0,
+            "労働者災害補償保険法", // 33バイト
+            "ろうどうしゃさいがいほしょうほけんほう", // 63バイト
+            None, // 言語モデルにない
+            false,
+        );
+        graph_with_kanji.graph.insert(63, vec![kanji_node.clone()]);
+
+        let cost = graph_with_kanji.get_node_cost(&kanji_node);
+        // surface.len() < yomi.len() なので get_cost(1)
+        let expected_cost = graph_with_kanji.system_unigram_lm.get_cost(1);
+        assert_eq!(cost, expected_cost);
+
+        Ok(())
+    }
+}

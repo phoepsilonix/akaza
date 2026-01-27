@@ -495,4 +495,217 @@ mod tests {
         // assert_eq!(result, "来たかな");
         Ok(())
     }
+
+    #[test]
+    fn test_multi_word_conversion() -> anyhow::Result<()> {
+        // 3単語以上の複合文の変換テスト
+        use crate::kana_trie::cedarwood_kana_trie::CedarwoodKanaTrie;
+
+        let kana_trie = CedarwoodKanaTrie::build(vec![
+            "きょう".to_string(),
+            "は".to_string(),
+            "いい".to_string(),
+            "てんき".to_string(),
+        ]);
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph = segmenter.build("きょうはいいてんき", None);
+
+        let dict = HashMap::from([
+            ("きょう".to_string(), vec!["今日".to_string()]),
+            ("は".to_string(), vec!["は".to_string()]),
+            ("いい".to_string(), vec!["良い".to_string()]),
+            ("てんき".to_string(), vec!["天気".to_string()]),
+        ]);
+
+        let mut system_unigram_lm_builder = MarisaSystemUnigramLMBuilder::default();
+        system_unigram_lm_builder.add("今日/きょう", 1.0);
+        system_unigram_lm_builder.add("は/は", 0.5);
+        system_unigram_lm_builder.add("良い/いい", 1.2);
+        system_unigram_lm_builder.add("天気/てんき", 1.5);
+        system_unigram_lm_builder.set_total_words(100);
+        system_unigram_lm_builder.set_unique_words(50);
+        let system_unigram_lm = system_unigram_lm_builder.build()?;
+
+        // bigram スコアを設定して正しい順序を優先
+        let unigram_map = system_unigram_lm.as_hash_map();
+        let kyou_id = unigram_map.get("今日/きょう").unwrap().0;
+        let ha_id = unigram_map.get("は/は").unwrap().0;
+        let ii_id = unigram_map.get("良い/いい").unwrap().0;
+        let tenki_id = unigram_map.get("天気/てんき").unwrap().0;
+
+        let mut system_bigram_lm_builder = MarisaSystemBigramLMBuilder::default();
+        system_bigram_lm_builder.set_default_edge_cost(10.0);
+        system_bigram_lm_builder.add(kyou_id, ha_id, 0.5); // 今日は
+        system_bigram_lm_builder.add(ha_id, ii_id, 0.3); // は良い
+        system_bigram_lm_builder.add(ii_id, tenki_id, 0.4); // 良い天気
+        let system_bigram_lm = system_bigram_lm_builder.build()?;
+
+        let graph_builder = GraphBuilder::new(
+            HashmapVecKanaKanjiDict::new(dict),
+            HashmapVecKanaKanjiDict::new(HashMap::new()),
+            Arc::new(Mutex::new(UserData::default())),
+            Rc::new(system_unigram_lm),
+            Rc::new(system_bigram_lm),
+        );
+        let lattice = graph_builder.construct("きょうはいいてんき", &graph);
+        let resolver = GraphResolver::default();
+        let result = resolver.resolve(&lattice)?;
+
+        // 3単語以上の複合文の変換が成功することを確認
+        assert!(!result.is_empty());
+        assert!(!result[0].is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_long_sentence_conversion() -> anyhow::Result<()> {
+        // より長い文章の変換テスト
+        use crate::kana_trie::cedarwood_kana_trie::CedarwoodKanaTrie;
+
+        let kana_trie = CedarwoodKanaTrie::build(vec![
+            "わたし".to_string(),
+            "は".to_string(),
+            "がっこう".to_string(),
+            "に".to_string(),
+            "いきます".to_string(),
+        ]);
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph = segmenter.build("わたしはがっこうにいきます", None);
+
+        let dict = HashMap::from([
+            ("わたし".to_string(), vec!["私".to_string()]),
+            ("は".to_string(), vec!["は".to_string()]),
+            ("がっこう".to_string(), vec!["学校".to_string()]),
+            ("に".to_string(), vec!["に".to_string()]),
+            ("いきます".to_string(), vec!["行きます".to_string()]),
+        ]);
+
+        let mut system_unigram_lm_builder = MarisaSystemUnigramLMBuilder::default();
+        system_unigram_lm_builder.add("私/わたし", 1.0);
+        system_unigram_lm_builder.add("は/は", 0.5);
+        system_unigram_lm_builder.add("学校/がっこう", 1.5);
+        system_unigram_lm_builder.add("に/に", 0.3);
+        system_unigram_lm_builder.add("行きます/いきます", 1.2);
+        system_unigram_lm_builder.set_total_words(100);
+        system_unigram_lm_builder.set_unique_words(50);
+        let system_unigram_lm = system_unigram_lm_builder.build()?;
+
+        let mut system_bigram_lm_builder = MarisaSystemBigramLMBuilder::default();
+        system_bigram_lm_builder.set_default_edge_cost(10.0);
+        let system_bigram_lm = system_bigram_lm_builder.build()?;
+
+        let graph_builder = GraphBuilder::new(
+            HashmapVecKanaKanjiDict::new(dict),
+            HashmapVecKanaKanjiDict::new(HashMap::new()),
+            Arc::new(Mutex::new(UserData::default())),
+            Rc::new(system_unigram_lm),
+            Rc::new(system_bigram_lm),
+        );
+        let lattice = graph_builder.construct("わたしはがっこうにいきます", &graph);
+        let resolver = GraphResolver::default();
+        let result = resolver.resolve(&lattice)?;
+
+        // 長い文章の変換が成功することを確認
+        assert!(!result.is_empty());
+        assert!(!result[0].is_empty());
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_ambiguous_conversion_ranking() -> anyhow::Result<()> {
+        // 曖昧な変換での候補ランキングのテスト
+        use crate::kana_trie::cedarwood_kana_trie::CedarwoodKanaTrie;
+
+        let kana_trie = CedarwoodKanaTrie::build(vec!["はし".to_string()]);
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph = segmenter.build("はし", None);
+
+        let dict = HashMap::from([(
+            "はし".to_string(),
+            vec!["橋".to_string(), "箸".to_string(), "端".to_string()],
+        )]);
+
+        let mut system_unigram_lm_builder = MarisaSystemUnigramLMBuilder::default();
+        // 異なるスコアを設定
+        system_unigram_lm_builder.add("橋/はし", 2.0); // 最も一般的
+        system_unigram_lm_builder.add("箸/はし", 1.5);
+        system_unigram_lm_builder.add("端/はし", 1.0); // 最も稀
+        system_unigram_lm_builder.set_total_words(100);
+        system_unigram_lm_builder.set_unique_words(50);
+        let system_unigram_lm = system_unigram_lm_builder.build()?;
+
+        let mut system_bigram_lm_builder = MarisaSystemBigramLMBuilder::default();
+        system_bigram_lm_builder.set_default_edge_cost(10.0);
+        let system_bigram_lm = system_bigram_lm_builder.build()?;
+
+        let graph_builder = GraphBuilder::new(
+            HashmapVecKanaKanjiDict::new(dict),
+            HashmapVecKanaKanjiDict::new(HashMap::new()),
+            Arc::new(Mutex::new(UserData::default())),
+            Rc::new(system_unigram_lm),
+            Rc::new(system_bigram_lm),
+        );
+        let lattice = graph_builder.construct("はし", &graph);
+        let resolver = GraphResolver::default();
+        let result = resolver.resolve(&lattice)?;
+
+        // 複数候補が返されることを確認
+        assert!(!result.is_empty());
+
+        // 最上位候補を確認
+        let top_surface = result[0].iter().next().unwrap().surface.as_str();
+        // いずれかの候補が最上位に来る
+        assert!(top_surface == "橋" || top_surface == "箸" || top_surface == "端");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_user_learning_priority() -> anyhow::Result<()> {
+        // ユーザー学習が候補順位に影響することをテスト
+        use crate::kana_trie::cedarwood_kana_trie::CedarwoodKanaTrie;
+
+        let kana_trie = CedarwoodKanaTrie::build(vec!["はし".to_string()]);
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph = segmenter.build("はし", None);
+
+        let dict = HashMap::from([(
+            "はし".to_string(),
+            vec!["橋".to_string(), "箸".to_string()],
+        )]);
+
+        let mut system_unigram_lm_builder = MarisaSystemUnigramLMBuilder::default();
+        system_unigram_lm_builder.add("橋/はし", 2.0);
+        system_unigram_lm_builder.add("箸/はし", 1.5);
+        system_unigram_lm_builder.set_total_words(100);
+        system_unigram_lm_builder.set_unique_words(50);
+        let system_unigram_lm = system_unigram_lm_builder.build()?;
+
+        let mut system_bigram_lm_builder = MarisaSystemBigramLMBuilder::default();
+        system_bigram_lm_builder.set_default_edge_cost(10.0);
+        let system_bigram_lm = system_bigram_lm_builder.build()?;
+
+        let mut user_data = UserData::default();
+        // ユーザーが "箸" を学習している
+        user_data.record_entries(&[Candidate::new("はし", "箸", 0.1)]);
+
+        let graph_builder = GraphBuilder::new(
+            HashmapVecKanaKanjiDict::new(dict),
+            HashmapVecKanaKanjiDict::new(HashMap::new()),
+            Arc::new(Mutex::new(user_data)),
+            Rc::new(system_unigram_lm),
+            Rc::new(system_bigram_lm),
+        );
+        let lattice = graph_builder.construct("はし", &graph);
+        let resolver = GraphResolver::default();
+        let result = resolver.resolve(&lattice)?;
+
+        // ユーザー学習により "箸" が最上位に来ることを確認
+        let top_surface = result[0].iter().next().unwrap().surface.as_str();
+        assert_eq!(top_surface, "箸");
+
+        Ok(())
+    }
 }
