@@ -174,7 +174,7 @@ mod tests {
                 MarisaSystemUnigramLMBuilder::default()
                     .set_unique_words(20)
                     .set_total_words(19)
-                    .build(),
+                    .build()?,
             ),
             Rc::new(
                 MarisaSystemBigramLMBuilder::default()
@@ -207,7 +207,7 @@ mod tests {
                 MarisaSystemUnigramLMBuilder::default()
                     .set_unique_words(20)
                     .set_total_words(19)
-                    .build(),
+                    .build()?,
             ),
             Rc::new(
                 MarisaSystemBigramLMBuilder::default()
@@ -240,7 +240,7 @@ mod tests {
                 MarisaSystemUnigramLMBuilder::default()
                     .set_unique_words(20)
                     .set_total_words(19)
-                    .build(),
+                    .build()?,
             ),
             Rc::new(
                 MarisaSystemBigramLMBuilder::default()

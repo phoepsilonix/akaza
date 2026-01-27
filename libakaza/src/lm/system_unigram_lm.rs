@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::{bail, Result};
 use log::info;
 
-use marisa_sys::{Keyset, Marisa};
+use rsmarisa::{Agent, Keyset, Trie};
 
 use crate::cost::calc_cost;
 use crate::lm::base::SystemUnigramLM;
@@ -32,8 +32,8 @@ impl MarisaSystemUnigramLMBuilder {
         self.data.push((word.to_string(), score));
     }
 
-    pub fn keyset(&self) -> Keyset {
-        let mut keyset = Keyset::default();
+    pub fn keyset(&mut self) -> Result<Keyset> {
+        let mut keyset = Keyset::new();
         for (kanji, score) in &self.data {
             // 区切り文字をいれなくても、末尾の4バイトを取り出せば十分な気がしないでもない。。
             // 先頭一致にして、+4バイトになるものを探せばいいはず。
@@ -44,9 +44,9 @@ impl MarisaSystemUnigramLMBuilder {
                 score.to_le_bytes().as_slice(), // バイナリにしてデータ容量を節約する
             ]
             .concat();
-            keyset.push_back(key.as_slice());
+            keyset.push_back_bytes(&key, 1.0)?;
         }
-        keyset
+        Ok(keyset)
     }
 
     pub fn set_total_words(&mut self, total_words: u32) -> &mut Self {
@@ -59,75 +59,77 @@ impl MarisaSystemUnigramLMBuilder {
         self
     }
 
-    pub fn save(&self, fname: &str) -> Result<()> {
-        let mut marisa = Marisa::default();
-        marisa.build(&self.keyset());
-        marisa.save(fname)?;
+    pub fn save(&mut self, fname: &str) -> Result<()> {
+        let mut keyset = self.keyset()?;
+        let mut trie = Trie::new();
+        trie.build(&mut keyset, 0);
+        trie.save(fname)?;
         Ok(())
     }
 
-    pub fn build(&self) -> MarisaSystemUnigramLM {
-        let mut marisa = Marisa::default();
-        marisa.build(&self.keyset());
+    pub fn build(&mut self) -> Result<MarisaSystemUnigramLM> {
+        let mut keyset = self.keyset()?;
+        let mut trie = Trie::new();
+        trie.build(&mut keyset, 0);
         let (_, total_words) =
-            MarisaSystemUnigramLM::find_from_trie(&marisa, TOTAL_WORDS_KEY).unwrap();
+            MarisaSystemUnigramLM::find_from_trie(&trie, TOTAL_WORDS_KEY).unwrap();
         let (_, unique_words) =
-            MarisaSystemUnigramLM::find_from_trie(&marisa, UNIQUE_WORDS_KEY).unwrap();
-        MarisaSystemUnigramLM {
-            marisa,
+            MarisaSystemUnigramLM::find_from_trie(&trie, UNIQUE_WORDS_KEY).unwrap();
+        Ok(MarisaSystemUnigramLM {
+            trie,
             total_words: total_words as u32,
             unique_words: unique_words as u32,
-        }
+        })
     }
 }
 
 pub struct MarisaSystemUnigramLM {
-    marisa: Marisa,
+    trie: Trie,
     total_words: u32,
     unique_words: u32,
 }
 
 impl MarisaSystemUnigramLM {
     pub fn num_keys(&self) -> usize {
-        self.marisa.num_keys()
+        self.trie.num_keys()
     }
 
     pub fn load(fname: &str) -> Result<MarisaSystemUnigramLM> {
         info!("Reading {}", fname);
-        let mut marisa = Marisa::default();
-        marisa.load(fname)?;
-        let Some((_, total_words)) = Self::find_from_trie(&marisa, TOTAL_WORDS_KEY) else {
+        let mut trie = Trie::new();
+        trie.load(fname)?;
+        let Some((_, total_words)) = Self::find_from_trie(&trie, TOTAL_WORDS_KEY) else {
             bail!("Missing key for {}", TOTAL_WORDS_KEY);
         };
-        let Some((_, unique_words)) = Self::find_from_trie(&marisa, UNIQUE_WORDS_KEY) else {
+        let Some((_, unique_words)) = Self::find_from_trie(&trie, UNIQUE_WORDS_KEY) else {
             bail!("Missing key for {}", UNIQUE_WORDS_KEY);
         };
         Ok(MarisaSystemUnigramLM {
-            marisa,
+            trie,
             total_words: total_words as u32,
             unique_words: unique_words as u32,
         })
     }
 
-    fn find_from_trie(marisa: &Marisa, word: &str) -> Option<(i32, f32)> {
+    fn find_from_trie(trie: &Trie, word: &str) -> Option<(i32, f32)> {
         assert_ne!(word.len(), 0);
 
-        let key = [word.as_bytes(), b"\xff"].concat();
-        let mut kanji_id: usize = usize::MAX;
-        let mut score = f32::MAX;
-        marisa.predictive_search(key.as_slice(), |word, id| {
-            kanji_id = id;
+        let mut key = word.as_bytes().to_vec();
+        key.push(0xff);
+        let mut agent = Agent::new();
+        agent.set_query_bytes(&key);
 
-            let idx = word.iter().position(|f| *f == b'\xff').unwrap();
-            let bytes: [u8; 4] = word[idx + 1..idx + 1 + 4].try_into().unwrap();
-            score = f32::from_le_bytes(bytes);
-            false
-        });
-        if kanji_id != usize::MAX {
-            Some((kanji_id as i32, score))
-        } else {
-            None
+        if trie.predictive_search(&mut agent) {
+            let word = agent.key().as_bytes();
+            let kanji_id = agent.key().id();
+
+            if let Some(idx) = word.iter().position(|f| *f == b'\xff') {
+                let bytes: [u8; 4] = word[idx + 1..idx + 1 + 4].try_into().unwrap();
+                let score = f32::from_le_bytes(bytes);
+                return Some((kanji_id as i32, score));
+            }
         }
+        None
     }
 }
 
@@ -138,19 +140,25 @@ impl SystemUnigramLM for MarisaSystemUnigramLM {
 
     /// @return (word_id, score)。
     fn find(&self, word: &str) -> Option<(i32, f32)> {
-        Self::find_from_trie(&self.marisa, word)
+        Self::find_from_trie(&self.trie, word)
     }
 
     fn as_hash_map(&self) -> HashMap<String, (i32, f32)> {
         let mut map = HashMap::new();
-        self.marisa.predictive_search("".as_bytes(), |word, id| {
-            let idx = word.iter().position(|f| *f == b'\xff').unwrap();
-            let bytes: [u8; 4] = word[idx + 1..idx + 1 + 4].try_into().unwrap();
-            let word = String::from_utf8_lossy(&word[0..idx]);
-            let cost = f32::from_le_bytes(bytes);
-            map.insert(word.to_string(), (id as i32, cost));
-            true
-        });
+        let mut agent = Agent::new();
+        agent.set_query_str("");
+
+        while self.trie.predictive_search(&mut agent) {
+            let word = agent.key().as_bytes();
+            let id = agent.key().id();
+
+            if let Some(idx) = word.iter().position(|f| *f == b'\xff') {
+                let bytes: [u8; 4] = word[idx + 1..idx + 1 + 4].try_into().unwrap();
+                let word_str = String::from_utf8_lossy(&word[0..idx]);
+                let cost = f32::from_le_bytes(bytes);
+                map.insert(word_str.to_string(), (id as i32, cost));
+            }
+        }
         map
     }
 }
@@ -169,11 +177,9 @@ mod tests {
         let mut builder = MarisaSystemUnigramLMBuilder::default();
         builder.add("hello", 0.4);
         builder.add("world", 0.2);
-        builder
-            .set_total_words(2)
-            .set_unique_words(2)
-            .save(&tmpfile)
-            .unwrap();
+        builder.set_total_words(2);
+        builder.set_unique_words(2);
+        builder.save(&tmpfile).unwrap();
 
         let lm = MarisaSystemUnigramLM::load(&tmpfile).unwrap();
         {
