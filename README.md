@@ -195,7 +195,6 @@ Github Actions で自動的に実行されているため、常に新鮮です�
 * **akaza-conf**: GUI 設定ツール (GTK4)
 * **akaza-dict**: GUI 辞書編集ツール (GTK4)
 * **akaza-data**: 言語モデル生成ツール
-* **marisa-sys**: MARISA Trie の Rust バインディング
 * **ibus-sys**: IBus の Rust バインディング
 
 ## 開発
