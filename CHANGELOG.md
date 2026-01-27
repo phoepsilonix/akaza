@@ -1,5 +1,73 @@
 # Changelog
 
+## [v0.2.1](https://github.com/akaza-im/akaza/compare/v0.2.0...v0.2.1) - 2026-01-27
+- fix off by one for lookup table selection. by @tokuhirom in https://github.com/akaza-im/akaza/pull/257
+- Refactor _update_lookup_table by @tokuhirom in https://github.com/akaza-im/akaza/pull/261
+- ライブコンバージョンのルックアップテーブル処理を変更 Close #259 by @tokuhirom in https://github.com/akaza-im/akaza/pull/262
+- kk /株式会社/ のようなアルファベットのみのものを辞書から読まないように by @tokuhirom in https://github.com/akaza-im/akaza/pull/264
+- 数字を分節として取り出すようにする Close #263 by @tokuhirom in https://github.com/akaza-im/akaza/pull/265
+- Optmize cargo deny by @tokuhirom in https://github.com/akaza-im/akaza/pull/266
+- 漢数字入力機能 Close #67 by @tokuhirom in https://github.com/akaza-im/akaza/pull/267
+- Refactor ibus by @tokuhirom in https://github.com/akaza-im/akaza/pull/269
+- Use "default" layout. Close #244 by @tokuhirom in https://github.com/akaza-im/akaza/pull/270
+- Ibus refactor2 by @tokuhirom in https://github.com/akaza-im/akaza/pull/272
+- SKK-JISYO.L をデフォルトで読み込むようにする Close #258 by @tokuhirom in https://github.com/akaza-im/akaza/pull/273
+- ibus-akaza をリファクタリングしたことによりエンバグした部分を修正 by @tokuhirom in https://github.com/akaza-im/akaza/pull/274
+- [非互換] コストの計算を利用時にするように変更。 by @tokuhirom in https://github.com/akaza-im/akaza/pull/275
+- 平仮名を優先する。 #252 by @tokuhirom in https://github.com/akaza-im/akaza/pull/276
+- add TUT romkan map #239 by @tokuhirom in https://github.com/akaza-im/akaza/pull/277
+- ライブコンバージョンモードでも、lookup table by @tokuhirom in https://github.com/akaza-im/akaza/pull/278
+- refactor keymap by @tokuhirom in https://github.com/akaza-im/akaza/pull/279
+- add kana-preferred mode for akaza-data tokenizer. by @tokuhirom in https://github.com/akaza-im/akaza/pull/280
+- make a directory before install files by @tkng in https://github.com/akaza-im/akaza/pull/283
+- refactor akaza-conf by @tokuhirom in https://github.com/akaza-im/akaza/pull/284
+- User dict by @tokuhirom in https://github.com/akaza-im/akaza/pull/286
+- change keyboard layout to "default" by @tkng in https://github.com/akaza-im/akaza/pull/287
+- Revert "平仮名を優先する。 #252" by @tokuhirom in https://github.com/akaza-im/akaza/pull/290
+- add executable bit for ibus-akaza installation by @tokuhirom in https://github.com/akaza-im/akaza/pull/292
+- fix the current directory retrieving feature by @tokuhirom in https://github.com/akaza-im/akaza/pull/295
+- Fix rustfmt formatting issues by @tokuhirom in https://github.com/akaza-im/akaza/pull/301
+- Separate lint and test jobs in CI workflow by @tokuhirom in https://github.com/akaza-im/akaza/pull/304
+- Pin Rust version to 1.67.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/306
+- Fix clippy warnings for Rust 1.67.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/307
+- Upgrade Rust to 1.68.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/309
+- Upgrade Rust to 1.69.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/310
+- Upgrade Rust to 1.70.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/311
+- Upgrade Rust to 1.71.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/312
+- Upgrade Rust to 1.72.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/313
+- Upgrade Rust to 1.73.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/314
+- Upgrade Rust from 1.73.0 to 1.74.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/315
+- Upgrade Rust from 1.74.0 to 1.75.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/316
+- Upgrade Rust from 1.75.0 to 1.77.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/317
+- Add cargo-deny job to CI by @tokuhirom in https://github.com/akaza-im/akaza/pull/318
+- Bump rustix from 0.36.9 to 0.36.16 by @dependabot[bot] in https://github.com/akaza-im/akaza/pull/296
+- Bump unsafe-libyaml from 0.2.7 to 0.2.10 by @dependabot[bot] in https://github.com/akaza-im/akaza/pull/297
+- Upgrade Rust from 1.77.0 to 1.81.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/320
+- Upgrade Rust from 1.81.0 to 1.88.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/321
+- Fix cargo-deny by installing manually by @tokuhirom in https://github.com/akaza-im/akaza/pull/319
+- Upgrade Rust from 1.88.0 to 1.92.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/322
+- Update dependencies to latest compatible versions by @tokuhirom in https://github.com/akaza-im/akaza/pull/300
+- Fix cargo-deny: Add Apache-2.0 WITH LLVM-exception to allowed licenses by @tokuhirom in https://github.com/akaza-im/akaza/pull/323
+- Add Renovate configuration by @tokuhirom in https://github.com/akaza-im/akaza/pull/325
+- Add Unicode-3.0 to allowed licenses by @tokuhirom in https://github.com/akaza-im/akaza/pull/324
+- Update kelp from 0.4.0 to 0.6.0 to remove atty dependency by @tokuhirom in https://github.com/akaza-im/akaza/pull/327
+- Update vibrato from 0.3.3 to 0.4.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/328
+- Add workspace resolver = "2" setting by @tokuhirom in https://github.com/akaza-im/akaza/pull/298
+- Update vibrato from 0.4.0 to 0.5.0 by @tokuhirom in https://github.com/akaza-im/akaza/pull/329
+- Update vibrato to 0.5.2 by @tokuhirom in https://github.com/akaza-im/akaza/pull/330
+- Remove unnecessary extern crate declarations by @tokuhirom in https://github.com/akaza-im/akaza/pull/299
+- Update GTK4 dependencies to 0.6.6 by @tokuhirom in https://github.com/akaza-im/akaza/pull/331
+- Update GTK4 dependencies to 0.7.3 by @tokuhirom in https://github.com/akaza-im/akaza/pull/332
+- Update GTK4 dependencies to 0.8.2 by @tokuhirom in https://github.com/akaza-im/akaza/pull/333
+- Update GTK4 dependencies to 0.9.7 by @tokuhirom in https://github.com/akaza-im/akaza/pull/334
+- Update GTK4 dependencies from 0.9.7 to 0.10.3 by @tokuhirom in https://github.com/akaza-im/akaza/pull/335
+- Update dependencies to latest versions by @tokuhirom in https://github.com/akaza-im/akaza/pull/336
+- Add tagpr and update README by @tokuhirom in https://github.com/akaza-im/akaza/pull/337
+- Update README with comprehensive improvements by @tokuhirom in https://github.com/akaza-im/akaza/pull/338
+- Fix tagpr workflow to use GitHub App token by @tokuhirom in https://github.com/akaza-im/akaza/pull/339
+- Update renovate.json by @tokuhirom in https://github.com/akaza-im/akaza/pull/340
+- Make Renovate more aggressive with frequent updates by @tokuhirom in https://github.com/akaza-im/akaza/pull/341
+
 ## [v0.1.7](https://github.com/akaza-im/akaza/compare/v0.1.6...v0.1.7) - 2026-01-27
 - Update GTK4 dependencies from 0.5.5 to 0.10.3
 - Update common dependencies to latest versions
