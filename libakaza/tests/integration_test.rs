@@ -18,7 +18,10 @@ fn test_end_to_end_conversion_pipeline() -> anyhow::Result<()> {
     // 1. 辞書を構築
     let dict = HashMap::from([
         ("わたし".to_string(), vec!["私".to_string()]),
-        ("あなた".to_string(), vec!["貴方".to_string(), "あなた".to_string()]),
+        (
+            "あなた".to_string(),
+            vec!["貴方".to_string(), "あなた".to_string()],
+        ),
         ("かれ".to_string(), vec!["彼".to_string()]),
         ("かのじょ".to_string(), vec!["彼女".to_string()]),
         ("です".to_string(), vec!["です".to_string()]),
@@ -91,9 +94,15 @@ fn test_end_to_end_conversion_pipeline() -> anyhow::Result<()> {
 #[test]
 fn test_candidate_ranking_with_bigram() -> anyhow::Result<()> {
     let dict = HashMap::from([
-        ("きょう".to_string(), vec!["今日".to_string(), "教".to_string()]),
+        (
+            "きょう".to_string(),
+            vec!["今日".to_string(), "教".to_string()],
+        ),
         ("は".to_string(), vec!["は".to_string()]),
-        ("いい".to_string(), vec!["良い".to_string(), "飯".to_string()]),
+        (
+            "いい".to_string(),
+            vec!["良い".to_string(), "飯".to_string()],
+        ),
     ]);
 
     let mut unigram_builder = MarisaSystemUnigramLMBuilder::default();
@@ -249,9 +258,7 @@ fn test_long_input_performance() -> anyhow::Result<()> {
 /// ユーザー辞書とシステム辞書の統合
 #[test]
 fn test_user_dict_and_system_dict_integration() -> anyhow::Result<()> {
-    let system_dict = HashMap::from([
-        ("たろう".to_string(), vec!["太郎".to_string()]),
-    ]);
+    let system_dict = HashMap::from([("たろう".to_string(), vec!["太郎".to_string()])]);
 
     let mut unigram_builder = MarisaSystemUnigramLMBuilder::default();
     unigram_builder.add("太郎/たろう", 2.0);

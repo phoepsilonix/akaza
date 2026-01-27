@@ -200,13 +200,7 @@ mod tests {
         graph.insert(0, vec![WordNode::create_bos()]);
 
         // "わたし" のノード
-        let watashi_node = WordNode::new(
-            0,
-            "私",
-            "わたし",
-            Some((watashi_id, 1.5)),
-            false,
-        );
+        let watashi_node = WordNode::new(0, "私", "わたし", Some((watashi_id, 1.5)), false);
         graph.insert(9, vec![watashi_node.clone()]);
 
         // "かれ" のノード
@@ -335,9 +329,9 @@ mod tests {
         let mut graph_with_kanji = setup_test_graph()?;
         let kanji_node = WordNode::new(
             0,
-            "労働者災害補償保険法", // 33バイト
+            "労働者災害補償保険法",                   // 33バイト
             "ろうどうしゃさいがいほしょうほけんほう", // 63バイト
-            None, // 言語モデルにない
+            None,                                     // 言語モデルにない
             false,
         );
         graph_with_kanji.graph.insert(63, vec![kanji_node.clone()]);

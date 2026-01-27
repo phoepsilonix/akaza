@@ -671,10 +671,7 @@ mod tests {
         let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
         let graph = segmenter.build("はし", None);
 
-        let dict = HashMap::from([(
-            "はし".to_string(),
-            vec!["橋".to_string(), "箸".to_string()],
-        )]);
+        let dict = HashMap::from([("はし".to_string(), vec!["橋".to_string(), "箸".to_string()])]);
 
         let mut system_unigram_lm_builder = MarisaSystemUnigramLMBuilder::default();
         system_unigram_lm_builder.add("橋/はし", 2.0);
