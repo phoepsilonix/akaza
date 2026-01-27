@@ -5,7 +5,7 @@ use log::info;
 
 use libakaza::cost::calc_cost;
 use libakaza::lm::base::SystemUnigramLM;
-use marisa_sys::{Keyset, Marisa};
+use rsmarisa::{Agent, Keyset, Trie};
 
 /**
  * unigram 言語モデル。
@@ -21,8 +21,8 @@ impl WordcntUnigramBuilder {
         self.data.push((word.to_string(), cnt));
     }
 
-    pub fn keyset(&self) -> Keyset {
-        let mut keyset = Keyset::default();
+    pub fn keyset(&self) -> Result<Keyset> {
+        let mut keyset = Keyset::new();
         for (kanji, score) in &self.data {
             // 区切り文字をいれなくても、末尾の4バイトを取り出せば十分な気がしないでもない。。
             // 先頭一致にして、+4バイトになるものを探せばいいはず。
@@ -33,53 +33,60 @@ impl WordcntUnigramBuilder {
                 score.to_le_bytes().as_slice(), // バイナリにしてデータ容量を節約する
             ]
             .concat();
-            keyset.push_back(key.as_slice());
+            keyset.push_back_bytes(&key, 1.0)?;
         }
-        keyset
+        Ok(keyset)
     }
 
     pub fn save(&self, fname: &str) -> Result<()> {
-        let mut marisa = Marisa::default();
-        marisa.build(&self.keyset());
-        marisa.save(fname)?;
+        let mut keyset = self.keyset()?;
+        let mut trie = Trie::new();
+        trie.build(&mut keyset, 0);
+        trie.save(fname)?;
         Ok(())
     }
 }
 
 pub struct WordcntUnigram {
-    marisa: Marisa,
+    trie: Trie,
     pub(crate) total_words: u32,
     pub(crate) unique_words: u32,
 }
 
 impl WordcntUnigram {
     pub fn num_keys(&self) -> usize {
-        self.marisa.num_keys()
+        self.trie.num_keys()
     }
 
     pub fn to_count_hashmap(&self) -> HashMap<String, (i32, u32)> {
-        Self::_to_count_hashmap(&self.marisa)
+        Self::_to_count_hashmap(&self.trie)
     }
 
-    fn _to_count_hashmap(marisa: &Marisa) -> HashMap<String, (i32, u32)> {
+    fn _to_count_hashmap(trie: &Trie) -> HashMap<String, (i32, u32)> {
         let mut map: HashMap<String, (i32, u32)> = HashMap::new();
-        marisa.predictive_search("".as_bytes(), |word, id| {
-            let idx = word.iter().position(|f| *f == b'\xff').unwrap();
-            let bytes: [u8; 4] = word[idx + 1..idx + 1 + 4].try_into().unwrap();
-            let word = String::from_utf8_lossy(&word[0..idx]);
-            let cost = u32::from_le_bytes(bytes);
-            map.insert(word.to_string(), (id as i32, cost));
-            true
-        });
+        let mut agent = Agent::new();
+        agent.set_query_str("");
+
+        while trie.predictive_search(&mut agent) {
+            let word = agent.key().as_bytes();
+            let id = agent.key().id();
+
+            if let Some(idx) = word.iter().position(|f| *f == b'\xff') {
+                let bytes: [u8; 4] = word[idx + 1..idx + 1 + 4].try_into().unwrap();
+                let word_str = String::from_utf8_lossy(&word[0..idx]);
+                let cost = u32::from_le_bytes(bytes);
+                map.insert(word_str.to_string(), (id as i32, cost));
+            }
+        }
         map
     }
 
     pub fn load(fname: &str) -> Result<WordcntUnigram> {
         info!("Reading {}", fname);
-        let mut marisa = Marisa::default();
-        marisa.load(fname)?;
+        let mut trie = Trie::new();
+        trie.load(fname)?;
 
-        let map = Self::_to_count_hashmap(&marisa);
+        let map = Self::_to_count_hashmap(&trie);
 
         // 総出現単語数
         let total_words = map.iter().map(|(_, (_, cnt))| *cnt).sum();
@@ -87,7 +94,7 @@ impl WordcntUnigram {
         let unique_words = map.keys().count() as u32;
 
         Ok(WordcntUnigram {
-            marisa,
+            trie,
             total_words,
             unique_words,
         })
@@ -101,46 +108,51 @@ impl SystemUnigramLM for WordcntUnigram {
 
     /// @return (word_id, score)。
     fn find(&self, word: &str) -> Option<(i32, f32)> {
-        let marisa = &self.marisa;
         assert_ne!(word.len(), 0);
 
-        let key = [word.as_bytes(), b"\xff"].concat();
-        let mut word_id: usize = usize::MAX;
-        let mut score = u32::MAX;
-        marisa.predictive_search(key.as_slice(), |word, id| {
-            word_id = id;
+        let key = format!("{}\u{ff}", word);
+        let mut agent = Agent::new();
+        agent.set_query_str(&key);
 
-            let idx = word.iter().position(|f| *f == b'\xff').unwrap();
-            let bytes: [u8; 4] = word[idx + 1..idx + 1 + 4].try_into().unwrap();
-            score = u32::from_le_bytes(bytes);
-            false
-        });
-        if word_id != usize::MAX {
-            Some((
-                word_id as i32,
-                calc_cost(score, self.total_words, self.unique_words),
-            ))
-        } else {
-            None
+        if self.trie.predictive_search(&mut agent) {
+            let word_bytes = agent.key().as_bytes();
+            let word_id = agent.key().id();
+
+            if let Some(idx) = word_bytes.iter().position(|f| *f == b'\xff') {
+                let bytes: [u8; 4] = word_bytes[idx + 1..idx + 1 + 4].try_into().unwrap();
+                let score = u32::from_le_bytes(bytes);
+                return Some((
+                    word_id as i32,
+                    calc_cost(score, self.total_words, self.unique_words),
+                ));
+            }
         }
+
+        None
     }
 
     fn as_hash_map(&self) -> HashMap<String, (i32, f32)> {
         let mut map = HashMap::new();
-        self.marisa.predictive_search("".as_bytes(), |word, id| {
-            let idx = word.iter().position(|f| *f == b'\xff').unwrap();
-            let bytes: [u8; 4] = word[idx + 1..idx + 1 + 4].try_into().unwrap();
-            let word = String::from_utf8_lossy(&word[0..idx]);
-            let cnt = u32::from_le_bytes(bytes);
-            map.insert(
-                word.to_string(),
-                (
-                    id as i32,
-                    calc_cost(cnt, self.total_words, self.unique_words),
-                ),
-            );
-            true
-        });
+        let mut agent = Agent::new();
+        agent.set_query_str("");
+
+        while self.trie.predictive_search(&mut agent) {
+            let word = agent.key().as_bytes();
+            let id = agent.key().id();
+
+            if let Some(idx) = word.iter().position(|f| *f == b'\xff') {
+                let bytes: [u8; 4] = word[idx + 1..idx + 1 + 4].try_into().unwrap();
+                let word_str = String::from_utf8_lossy(&word[0..idx]);
+                let cnt = u32::from_le_bytes(bytes);
+                map.insert(
+                    word_str.to_string(),
+                    (
+                        id as i32,
+                        calc_cost(cnt, self.total_words, self.unique_words),
+                    ),
+                );
+            }
+        }
         map
     }
 }
