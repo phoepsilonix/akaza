@@ -5,16 +5,22 @@ use log::info;
 
 use libakaza::cost::calc_cost;
 use libakaza::lm::base::SystemBigramLM;
-use libakaza::search_result::SearchResult;
-use marisa_sys::{Keyset, Marisa};
+use rsmarisa::{Agent, Keyset, Trie};
 
 /**
  * bigram 言語モデル。
  * unigram の生成のときに得られた単語IDを利用することで、圧縮している。
  */
-#[derive(Default)]
 pub struct WordcntBigramBuilder {
     keyset: Keyset,
+}
+
+impl Default for WordcntBigramBuilder {
+    fn default() -> Self {
+        Self {
+            keyset: Keyset::new(),
+        }
+    }
 }
 
 impl WordcntBigramBuilder {
@@ -29,19 +35,19 @@ impl WordcntBigramBuilder {
         key.extend(id1_bytes[0..3].iter());
         key.extend(id2_bytes[0..3].iter());
         key.extend(cnt.to_le_bytes());
-        self.keyset.push_back(key.as_slice());
+        self.keyset.push_back_bytes(&key, 1.0).unwrap();
     }
 
-    pub fn save(&self, ofname: &str) -> anyhow::Result<()> {
-        let mut marisa = Marisa::default();
-        marisa.build(&self.keyset);
-        marisa.save(ofname)?;
+    pub fn save(&mut self, ofname: &str) -> anyhow::Result<()> {
+        let mut trie = Trie::new();
+        trie.build(&mut self.keyset, 0);
+        trie.save(ofname)?;
         Ok(())
     }
 }
 
 pub struct WordcntBigram {
-    marisa: Marisa,
+    trie: Trie,
     default_edge_cost: f32,
     pub total_words: u32,
     pub unique_words: u32,
@@ -49,29 +55,32 @@ pub struct WordcntBigram {
 
 impl WordcntBigram {
     pub fn to_cnt_map(&self) -> HashMap<(i32, i32), u32> {
-        Self::_to_map(&self.marisa)
+        Self::_to_map(&self.trie)
     }
 
-    fn _to_map(marisa: &Marisa) -> HashMap<(i32, i32), u32> {
+    fn _to_map(trie: &Trie) -> HashMap<(i32, i32), u32> {
         let mut map: HashMap<(i32, i32), u32> = HashMap::new();
-        marisa.predictive_search("".as_bytes(), |word, _id| {
+        let mut agent = Agent::new();
+        agent.set_query_str("");
+
+        while trie.predictive_search(&mut agent) {
+            let word = agent.key().as_bytes();
             if word.len() == 10 {
                 let word_id1 = i32::from_le_bytes([word[0], word[1], word[2], 0]);
                 let word_id2 = i32::from_le_bytes([word[3], word[4], word[5], 0]);
                 let cost = u32::from_le_bytes([word[6], word[7], word[8], word[9]]);
                 map.insert((word_id1, word_id2), cost);
             }
-            true
-        });
+        }
         map
     }
 
     pub fn load(filename: &str) -> Result<WordcntBigram> {
         info!("Loading system-bigram: {}", filename);
-        let mut marisa = Marisa::default();
-        marisa.load(filename)?;
+        let mut trie = Trie::new();
+        trie.load(filename)?;
 
-        let map: HashMap<(i32, i32), u32> = Self::_to_map(&marisa);
+        let map: HashMap<(i32, i32), u32> = Self::_to_map(&trie);
 
         // 総出現単語数
         let total_words = map.iter().map(|((_, _), cnt)| *cnt).sum();
@@ -80,7 +89,7 @@ impl WordcntBigram {
         let default_edge_cost = calc_cost(0, total_words, unique_words);
 
         Ok(WordcntBigram {
-            marisa,
+            trie,
             default_edge_cost,
             total_words,
             unique_words,
@@ -101,25 +110,29 @@ impl SystemBigramLM for WordcntBigram {
         let mut key: Vec<u8> = Vec::new();
         key.extend(word_id1.to_le_bytes()[0..3].iter());
         key.extend(word_id2.to_le_bytes()[0..3].iter());
-        let mut got: Vec<SearchResult> = Vec::new();
-        self.marisa.predictive_search(key.as_slice(), |key, id| {
-            got.push(SearchResult {
-                keyword: key.to_vec(),
-                id,
-            });
-            true
-        });
-        let result = got.first()?;
-        let last2: [u8; 4] = result.keyword[result.keyword.len() - 4..result.keyword.len()]
-            .try_into()
-            .unwrap();
-        let score: u32 = u32::from_le_bytes(last2);
-        Some(calc_cost(score, self.total_words, self.unique_words))
+
+        let mut agent = Agent::new();
+        agent.set_query_bytes(&key);
+
+        if self.trie.predictive_search(&mut agent) {
+            let keyword = agent.key().as_bytes();
+            let last4: [u8; 4] = keyword[keyword.len() - 4..keyword.len()]
+                .try_into()
+                .unwrap();
+            let score: u32 = u32::from_le_bytes(last4);
+            return Some(calc_cost(score, self.total_words, self.unique_words));
+        }
+
+        None
     }
 
     fn as_hash_map(&self) -> HashMap<(i32, i32), f32> {
         let mut map: HashMap<(i32, i32), f32> = HashMap::new();
-        self.marisa.predictive_search("".as_bytes(), |word, _id| {
+        let mut agent = Agent::new();
+        agent.set_query_str("");
+
+        while self.trie.predictive_search(&mut agent) {
+            let word = agent.key().as_bytes();
             if word.len() == 10 {
                 let word_id1 = i32::from_le_bytes([word[0], word[1], word[2], 0]);
                 let word_id2 = i32::from_le_bytes([word[3], word[4], word[5], 0]);
@@ -129,8 +142,7 @@ impl SystemBigramLM for WordcntBigram {
                     calc_cost(cnt, self.total_words, self.unique_words),
                 );
             }
-            true
-        });
+        }
         map
     }
 }

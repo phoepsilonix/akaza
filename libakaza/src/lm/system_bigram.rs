@@ -4,10 +4,9 @@ use anyhow::{bail, Result};
 use half::f16;
 use log::info;
 
-use marisa_sys::{Keyset, Marisa};
+use rsmarisa::{Agent, Keyset, Trie};
 
 use crate::lm::base::SystemBigramLM;
-use crate::search_result::SearchResult;
 
 /*
    {word1 ID}    # 3 bytes
@@ -21,9 +20,16 @@ const DEFAULT_COST_KEY: &str = "__DEFAULT_EDGE_COST__";
  * bigram 言語モデル。
  * unigram の生成のときに得られた単語IDを利用することで、圧縮している。
  */
-#[derive(Default)]
 pub struct MarisaSystemBigramLMBuilder {
     keyset: Keyset,
+}
+
+impl Default for MarisaSystemBigramLMBuilder {
+    fn default() -> Self {
+        Self {
+            keyset: Keyset::new(),
+        }
+    }
 }
 
 impl MarisaSystemBigramLMBuilder {
@@ -54,72 +60,66 @@ impl MarisaSystemBigramLMBuilder {
         key.extend(id1_bytes[0..3].iter());
         key.extend(id2_bytes[0..3].iter());
         key.extend(f16::from_f32(score).to_le_bytes());
-        self.keyset.push_back(key.as_slice());
+        self.keyset.push_back_bytes(&key, 1.0).unwrap();
     }
 
     pub fn set_default_edge_cost(&mut self, score: f32) -> &mut Self {
         let key = format!("{DEFAULT_COST_KEY}\t{score}");
-        let key1 = key.as_bytes().to_vec();
-        self.keyset.push_back(key1.as_slice());
+        self.keyset.push_back_str(&key).unwrap();
         self
     }
 
-    pub fn build(&self) -> Result<MarisaSystemBigramLM> {
-        let mut marisa = Marisa::default();
-        marisa.build(&self.keyset);
-        let default_edge_cost = MarisaSystemBigramLM::read_default_edge_cost(&marisa)?;
+    pub fn build(&mut self) -> Result<MarisaSystemBigramLM> {
+        let mut trie = Trie::new();
+        trie.build(&mut self.keyset, 0);
+        let default_edge_cost = MarisaSystemBigramLM::read_default_edge_cost(&trie)?;
         Ok(MarisaSystemBigramLM {
-            marisa,
+            trie,
             default_edge_cost,
         })
     }
 
-    pub fn save(&self, ofname: &str) -> Result<()> {
-        let mut marisa = Marisa::default();
-        marisa.build(&self.keyset);
-        marisa.save(ofname)?;
+    pub fn save(&mut self, ofname: &str) -> Result<()> {
+        let mut trie = Trie::new();
+        trie.build(&mut self.keyset, 0);
+        trie.save(ofname)?;
         Ok(())
     }
 }
 
 pub struct MarisaSystemBigramLM {
-    marisa: Marisa,
+    trie: Trie,
     default_edge_cost: f32,
 }
 
 impl MarisaSystemBigramLM {
     pub fn load(filename: &str) -> Result<MarisaSystemBigramLM> {
         info!("Loading system-bigram: {}", filename);
-        let mut marisa = Marisa::default();
-        marisa.load(filename)?;
-        let default_edge_cost = Self::read_default_edge_cost(&marisa);
+        let mut trie = Trie::new();
+        trie.load(filename)?;
+        let default_edge_cost = Self::read_default_edge_cost(&trie)?;
         Ok(MarisaSystemBigramLM {
-            marisa,
-            default_edge_cost: default_edge_cost?,
+            trie,
+            default_edge_cost,
         })
     }
 
     pub fn num_keys(&self) -> usize {
-        self.marisa.num_keys()
+        self.trie.num_keys()
     }
 
-    fn read_default_edge_cost(marisa: &Marisa) -> Result<f32> {
-        let mut keys: Vec<Vec<u8>> = Vec::new();
-        marisa.predictive_search(DEFAULT_COST_KEY.as_bytes(), |key, _| {
-            keys.push(key.to_vec());
-            false
-        });
+    fn read_default_edge_cost(trie: &Trie) -> Result<f32> {
+        let mut agent = Agent::new();
+        agent.set_query_str(DEFAULT_COST_KEY);
 
-        let Some(key) = keys.first() else {
-            bail!("Cannot read default cost from bigram-trie");
-        };
-
-        let key = String::from_utf8_lossy(key);
-        if let Some((_, score)) = key.split_once('\t') {
-            Ok(score.parse::<f32>()?)
-        } else {
-            bail!("Cannot parse default edge cost from trie");
+        if trie.predictive_search(&mut agent) {
+            let key = agent.key().as_str();
+            if let Some((_, score)) = key.split_once('\t') {
+                return Ok(score.parse::<f32>()?);
+            }
         }
+
+        bail!("Cannot read default cost from bigram-trie");
     }
 }
 
@@ -136,33 +136,36 @@ impl SystemBigramLM for MarisaSystemBigramLM {
         let mut key: Vec<u8> = Vec::new();
         key.extend(word_id1.to_le_bytes()[0..3].iter());
         key.extend(word_id2.to_le_bytes()[0..3].iter());
-        let mut got: Vec<SearchResult> = Vec::new();
-        self.marisa.predictive_search(key.as_slice(), |key, id| {
-            got.push(SearchResult {
-                keyword: key.to_vec(),
-                id,
-            });
-            true
-        });
-        let result = got.first()?;
-        let last2: [u8; 2] = result.keyword[result.keyword.len() - 2..result.keyword.len()]
-            .try_into()
-            .unwrap();
-        let score: f16 = f16::from_le_bytes(last2);
-        Some(score.to_f32())
+
+        let mut agent = Agent::new();
+        agent.set_query_bytes(&key);
+
+        if self.trie.predictive_search(&mut agent) {
+            let keyword = agent.key().as_bytes();
+            let last2: [u8; 2] = keyword[keyword.len() - 2..keyword.len()]
+                .try_into()
+                .unwrap();
+            let score: f16 = f16::from_le_bytes(last2);
+            return Some(score.to_f32());
+        }
+
+        None
     }
 
     fn as_hash_map(&self) -> HashMap<(i32, i32), f32> {
         let mut map: HashMap<(i32, i32), f32> = HashMap::new();
-        self.marisa.predictive_search("".as_bytes(), |word, _id| {
+        let mut agent = Agent::new();
+        agent.set_query_str("");
+
+        while self.trie.predictive_search(&mut agent) {
+            let word = agent.key().as_bytes();
             if word.len() == 8 {
                 let word_id1 = i32::from_le_bytes([word[0], word[1], word[2], 0]);
                 let word_id2 = i32::from_le_bytes([word[3], word[4], word[5], 0]);
                 let cost = f16::from_le_bytes([word[6], word[7]]).to_f32();
                 map.insert((word_id1, word_id2), cost);
             }
-            true
-        });
+        }
         map
     }
 }

@@ -2,13 +2,12 @@ use std::collections::HashMap;
 
 use log::trace;
 
-use marisa_sys::{Keyset, Marisa};
+use rsmarisa::{Agent, Keyset, Trie};
 
 use crate::kana_kanji::base::KanaKanjiDict;
 
-#[derive(Default)]
 pub struct MarisaKanaKanjiDict {
-    marisa: Marisa,
+    trie: Trie,
 }
 
 impl MarisaKanaKanjiDict {
@@ -18,71 +17,63 @@ impl MarisaKanaKanjiDict {
         cache_serialized_key: &str,
     ) -> anyhow::Result<MarisaKanaKanjiDict> {
         let mut keyset = Self::build_keyset(dict);
-        keyset.push_back(
-            [
-                "__CACHE_SERIALIZED__\t".as_bytes(),
-                cache_serialized_key.as_bytes(),
-            ]
-            .concat()
-            .as_slice(),
-        );
+        let cache_key = format!("__CACHE_SERIALIZED__\t{}", cache_serialized_key);
+        keyset.push_back_str(&cache_key)?;
 
-        let mut marisa = Marisa::default();
-        marisa.build(&keyset);
-        marisa.save(cache_path)?;
-        Ok(MarisaKanaKanjiDict { marisa })
+        let mut trie = Trie::new();
+        trie.build(&mut keyset, 0);
+        trie.save(cache_path)?;
+        Ok(MarisaKanaKanjiDict { trie })
     }
 
     pub(crate) fn build(dict: HashMap<String, Vec<String>>) -> anyhow::Result<MarisaKanaKanjiDict> {
-        let keyset = Self::build_keyset(dict);
-        let mut marisa = Marisa::default();
-        marisa.build(&keyset);
-        Ok(MarisaKanaKanjiDict { marisa })
+        let mut keyset = Self::build_keyset(dict);
+        let mut trie = Trie::new();
+        trie.build(&mut keyset, 0);
+        Ok(MarisaKanaKanjiDict { trie })
     }
 
     pub fn build_keyset(dict: HashMap<String, Vec<String>>) -> Keyset {
-        let mut keyset = Keyset::default();
+        let mut keyset = Keyset::new();
         for (kana, surfaces) in dict {
-            keyset.push_back(
-                [
-                    kana.as_bytes(),
-                    b"\t", // seperator
-                    surfaces.join("/").as_bytes(),
-                ]
-                .concat()
-                .as_slice(),
-            );
+            let entry = format!("{}\t{}", kana, surfaces.join("/"));
+            keyset.push_back_str(&entry).unwrap();
         }
         keyset
     }
 
     pub fn load(file_name: &str) -> anyhow::Result<MarisaKanaKanjiDict> {
-        let mut marisa = Marisa::default();
-        marisa.load(file_name)?;
-        Ok(MarisaKanaKanjiDict { marisa })
+        let mut trie = Trie::new();
+        trie.load(file_name)?;
+        Ok(MarisaKanaKanjiDict { trie })
     }
 
     pub fn cache_serialized(&self) -> String {
-        let mut p = String::new();
-        self.marisa
-            .predictive_search("__CACHE_SERIALIZED__\t".as_bytes(), |word, _| {
-                let idx = word.iter().position(|f| *f == b'\t').unwrap();
-                p = String::from_utf8_lossy(&word[idx + 1..word.len()]).to_string();
-                false
-            });
-        p
+        let mut agent = Agent::new();
+        agent.set_query_str("__CACHE_SERIALIZED__\t");
+
+        if self.trie.predictive_search(&mut agent) {
+            let word = agent.key().as_bytes();
+            if let Some(idx) = word.iter().position(|f| *f == b'\t') {
+                return String::from_utf8_lossy(&word[idx + 1..]).to_string();
+            }
+        }
+        String::new()
     }
 
     pub fn yomis(&self) -> Vec<String> {
         let mut yomis: Vec<String> = Vec::new();
+        let mut agent = Agent::new();
+        agent.set_query_str("");
 
-        self.marisa.predictive_search("".as_bytes(), |word, _| {
-            if !word.starts_with("__CACHE_SERIALIZED__\t".as_bytes()) {
-                let idx = word.iter().position(|f| *f == b'\t').unwrap();
-                yomis.push(String::from_utf8_lossy(&word[0..idx]).to_string());
+        while self.trie.predictive_search(&mut agent) {
+            let word = agent.key().as_bytes();
+            if !word.starts_with(b"__CACHE_SERIALIZED__\t") {
+                if let Some(idx) = word.iter().position(|f| *f == b'\t') {
+                    yomis.push(String::from_utf8_lossy(&word[0..idx]).to_string());
+                }
             }
-            true
-        });
+        }
 
         yomis
     }
@@ -91,15 +82,20 @@ impl MarisaKanaKanjiDict {
 impl KanaKanjiDict for MarisaKanaKanjiDict {
     fn get(&self, kana: &str) -> Option<Vec<String>> {
         let mut surfaces: Vec<String> = Vec::new();
-        let query = [kana.as_bytes(), b"\t".as_slice()].concat();
-        self.marisa.predictive_search(query.as_slice(), |word, _| {
-            let idx = word.iter().position(|f| *f == b'\t').unwrap();
-            let s = String::from_utf8_lossy(&word[idx + 1..word.len()]).to_string();
-            for s in s.split('/').collect::<Vec<_>>() {
-                surfaces.push(s.to_string());
+        let query = format!("{}\t", kana);
+        let mut agent = Agent::new();
+        agent.set_query_str(&query);
+
+        if self.trie.predictive_search(&mut agent) {
+            let word = agent.key().as_bytes();
+            if let Some(idx) = word.iter().position(|f| *f == b'\t') {
+                let s = String::from_utf8_lossy(&word[idx + 1..]).to_string();
+                for s in s.split('/') {
+                    surfaces.push(s.to_string());
+                }
             }
-            false
-        });
+        }
+
         trace!("Got result: {:?}, {:?}", kana, surfaces);
         Some(surfaces)
     }
