@@ -3,7 +3,7 @@ use serial_test::serial;
 use std::thread;
 use std::time::Duration;
 
-mod test_harness;
+use super::test_harness;
 
 /// 基本的なE2Eテスト
 /// 注意: これらのテストは実際のIBusとXvfbが必要です
