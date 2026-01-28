@@ -165,7 +165,6 @@ impl AkazaContext {
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
-#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl AkazaContext {
     pub fn process_key_event(
         &mut self,
