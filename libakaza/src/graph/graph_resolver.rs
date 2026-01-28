@@ -230,7 +230,7 @@ impl GraphResolver {
                     // 元々の候補と完全に一致しているものは除外。
                     && cur.yomi != node_yomi
             })
-            .filter_map(|f| {
+            .map(|f| {
                 let head_cost = cost_map.get(f).copied().unwrap_or_else(|| {
                     error!(
                         "Cost not found in breakdown for node '{}' at pos {}",
@@ -238,7 +238,7 @@ impl GraphResolver {
                     );
                     f32::MAX
                 });
-                Some(BreakDown {
+                BreakDown {
                     node: f.clone(),
                     head_cost, // 先頭から辿った場合のコスト
                     tail_cost: tail_cost
@@ -246,7 +246,7 @@ impl GraphResolver {
                         + next_node
                             .map(|nn| lattice.get_edge_cost(f, nn))
                             .unwrap_or_else(|| lattice.get_default_edge_cost()),
-                })
+                }
             })
             .collect::<Vec<_>>();
         targets.sort();
