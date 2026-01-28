@@ -17,22 +17,22 @@ clean:
 
 # Docker test targets
 docker-test-build:
-	docker-compose -f docker-compose.test.yml build
+	docker compose -f docker-compose.test.yml build
 
 docker-test:
-	docker-compose -f docker-compose.test.yml run --rm test test
+	docker compose -f docker-compose.test.yml run --rm test test
 
 docker-test-unit:
-	docker-compose -f docker-compose.test.yml run --rm test test-unit
+	docker compose -f docker-compose.test.yml run --rm test test-unit
 
 docker-test-integration:
-	docker-compose -f docker-compose.test.yml run --rm test test-integration
+	docker compose -f docker-compose.test.yml run --rm test test-integration
 
 docker-test-e2e:
-	docker-compose -f docker-compose.test.yml run --rm test test-e2e
+	docker compose -f docker-compose.test.yml run --rm test test-e2e
 
 docker-test-shell:
-	docker-compose -f docker-compose.test.yml run --rm test bash
+	docker compose -f docker-compose.test.yml run --rm test bash
 
 .PHONY: all install install-resources clean \
 	docker-test-build docker-test docker-test-unit docker-test-integration docker-test-e2e docker-test-shell
