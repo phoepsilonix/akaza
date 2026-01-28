@@ -9,7 +9,7 @@ use ibus_sys::ibus_key::IBUS_KEY_VoidSymbol;
 use ibus_sys::keys::ibus_keyval_from_name;
 use libakaza::keymap::{KeyPattern, KeyState};
 
-#[derive(Hash, PartialEq)]
+#[derive(Hash, PartialEq, Debug)]
 struct IBusKeyPattern {
     key_state: KeyState,
     keyval: u32,
@@ -81,9 +81,9 @@ mod tests {
     #[test]
     fn test_ibus_key_pattern_equality() {
         // IBusKeyPatternの等価性をテスト
-        let pattern1 = IBusKeyPattern::new(KeyState::None, 97, 0);
-        let pattern2 = IBusKeyPattern::new(KeyState::None, 97, 0);
-        let pattern3 = IBusKeyPattern::new(KeyState::None, 98, 0);
+        let pattern1 = IBusKeyPattern::new(KeyState::PreComposition, 97, 0);
+        let pattern2 = IBusKeyPattern::new(KeyState::PreComposition, 97, 0);
+        let pattern3 = IBusKeyPattern::new(KeyState::PreComposition, 98, 0);
 
         assert_eq!(pattern1, pattern2, "Identical patterns should be equal");
         assert_ne!(pattern1, pattern3, "Different keyval should not be equal");
@@ -92,8 +92,8 @@ mod tests {
     #[test]
     fn test_ibus_key_pattern_different_states() {
         // 異なるKeyStateでパターンが異なることを確認
-        let pattern1 = IBusKeyPattern::new(KeyState::None, 97, 0);
-        let pattern2 = IBusKeyPattern::new(KeyState::RawInput, 97, 0);
+        let pattern1 = IBusKeyPattern::new(KeyState::PreComposition, 97, 0);
+        let pattern2 = IBusKeyPattern::new(KeyState::Composition, 97, 0);
 
         assert_ne!(
             pattern1, pattern2,
@@ -104,9 +104,9 @@ mod tests {
     #[test]
     fn test_ibus_key_pattern_different_modifiers() {
         // 異なるmodifierでパターンが異なることを確認
-        let pattern1 = IBusKeyPattern::new(KeyState::None, 97, 0);
+        let pattern1 = IBusKeyPattern::new(KeyState::PreComposition, 97, 0);
         let pattern2 = IBusKeyPattern::new(
-            KeyState::None,
+            KeyState::PreComposition,
             97,
             IBusModifierType_IBUS_CONTROL_MASK,
         );
@@ -138,7 +138,7 @@ mod tests {
         let keymap = HashMap::new();
         let ibus_keymap = IBusKeyMap::new(keymap).unwrap();
 
-        let result = ibus_keymap.get(&KeyState::None, 97, 0);
+        let result = ibus_keymap.get(&KeyState::PreComposition, 97, 0);
         assert!(result.is_none(), "Should return None for nonexistent key");
     }
 
