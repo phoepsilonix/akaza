@@ -13,7 +13,7 @@ use crate::input_mode::{
  */
 pub type IbusAkazaCommand = fn(&mut AkazaContext, *mut IBusEngine) -> bool;
 
-pub(crate) fn ibus_akaza_commands_map() -> HashMap<&'static str, IbusAkazaCommand> {
+pub fn ibus_akaza_commands_map() -> HashMap<&'static str, IbusAkazaCommand> {
     let mut function_map: HashMap<&'static str, IbusAkazaCommand> = HashMap::new();
 
     // shorthand

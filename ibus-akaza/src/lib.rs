@@ -9,7 +9,6 @@ pub mod keymap;
 pub mod ui;
 pub mod wrapper_bindings;
 
-#[cfg(test)]
 pub mod test_utils {
     use ibus_sys::engine::IBusEngine;
     use std::ptr;
