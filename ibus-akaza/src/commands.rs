@@ -2,11 +2,11 @@ use std::collections::HashMap;
 
 use ibus_sys::engine::IBusEngine;
 
+use crate::context::AkazaContext;
 use crate::input_mode::{
     INPUT_MODE_ALNUM, INPUT_MODE_FULLWIDTH_ALNUM, INPUT_MODE_HALFWIDTH_KATAKANA,
     INPUT_MODE_HIRAGANA, INPUT_MODE_KATAKANA,
 };
-use crate::AkazaContext;
 
 /**
  * shortcut key を設定可能な機能。
