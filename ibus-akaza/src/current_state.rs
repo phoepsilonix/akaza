@@ -519,10 +519,49 @@ impl CurrentState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::input_mode::InputMode;
+    use kelp::RomKanConverter;
+    use libakaza::engine::bigram_word_viterbi_engine::BigramWordViterbiEngine;
+    use libakaza::lm::base::SystemUnigramLM;
+    use libakaza::lm::system_bigram::MarisaSystemBigramLMBuilder;
+    use libakaza::lm::system_unigram_lm::MarisaSystemUnigramLMBuilder;
+    use std::collections::HashMap;
+    use std::rc::Rc;
+    use std::sync::{Arc, Mutex};
+
+    // テスト用のヘルパー: 最小限の CurrentState を作成
+    fn create_test_state() -> CurrentState {
+        // 最小限のユニグラムLM
+        let mut unigram_builder = MarisaSystemUnigramLMBuilder::default();
+        unigram_builder.set_total_words(100);
+        unigram_builder.set_unique_words(10);
+        let unigram_lm = unigram_builder.build().unwrap();
+
+        // 最小限のバイグラムLM
+        let mut bigram_builder = MarisaSystemBigramLMBuilder::default();
+        bigram_builder.set_default_edge_cost(10.0);
+        let bigram_lm = bigram_builder.build().unwrap();
+
+        // エンジンの作成
+        let engine = BigramWordViterbiEngine::new(
+            Rc::new(unigram_lm),
+            Rc::new(bigram_lm),
+            Arc::new(Mutex::new(
+                libakaza::user_side_data::user_data::UserData::default(),
+            )),
+        );
+
+        CurrentState::new(
+            InputMode::Hiragana,
+            false,
+            RomKanConverter::default(),
+            engine,
+        )
+    }
 
     #[test]
     fn test_build_string_normal() {
-        let mut state = CurrentState::default();
+        let mut state = create_test_state();
 
         // 正常な clauses と node_selected を設定
         state.clauses = vec![
@@ -541,7 +580,7 @@ mod tests {
 
     #[test]
     fn test_build_string_with_selection() {
-        let mut state = CurrentState::default();
+        let mut state = create_test_state();
 
         state.clauses = vec![vec![
             Candidate::new("わたし", "私", 0.0),
@@ -555,7 +594,7 @@ mod tests {
 
     #[test]
     fn test_build_string_missing_node_selected() {
-        let mut state = CurrentState::default();
+        let mut state = create_test_state();
 
         state.clauses = vec![vec![Candidate::new("わたし", "私", 0.0)]];
         // node_selected に何も設定しない（不整合状態）
@@ -567,7 +606,7 @@ mod tests {
 
     #[test]
     fn test_build_string_out_of_bounds_fallback() {
-        let mut state = CurrentState::default();
+        let mut state = create_test_state();
 
         state.clauses = vec![vec![
             Candidate::new("わたし", "私", 0.0),
@@ -582,7 +621,7 @@ mod tests {
 
     #[test]
     fn test_build_string_multiple_clauses_with_out_of_bounds() {
-        let mut state = CurrentState::default();
+        let mut state = create_test_state();
 
         state.clauses = vec![
             vec![
