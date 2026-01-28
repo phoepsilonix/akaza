@@ -41,15 +41,17 @@ pub fn extend_right(clauses: &[Vec<Candidate>], current_clause: usize) -> Vec<Ra
         if current_clause == i {
             // 現在選択中の文節は、右に伸ばす
             let next_candidate = &clauses[i + 1][0];
-            force_selected_clause.push(
-                offset
-                    ..offset
-                        + candidate.yomi.len()
-                        + next_candidate.yomi.chars().next().unwrap().len_utf8(),
-            );
+            // 空の yomi を持つ候補がある場合は、現在の構成を維持
+            let Some(next_first_char) = next_candidate.yomi.chars().next() else {
+                return keep_current(clauses);
+            };
+            force_selected_clause
+                .push(offset..offset + candidate.yomi.len() + next_first_char.len_utf8());
         } else if current_clause + 1 == i {
             // 選択中の分節の右のものは、1文字減らされる。
-            let c = candidate.yomi.chars().next().unwrap();
+            let Some(c) = candidate.yomi.chars().next() else {
+                return keep_current(clauses);
+            };
             let first_char_len = c.len_utf8();
             let start = offset + first_char_len;
             let end = offset + first_char_len + candidate.yomi.len() - first_char_len;
@@ -105,12 +107,17 @@ pub fn extend_left(clauses: &[Vec<Candidate>], current_clause: usize) -> Vec<Ran
             // TO-BE: [a][bc]
             let yomi = &clause[0].yomi;
             if i == current_clause {
-                let last_char = yomi.chars().last().unwrap();
+                let Some(last_char) = yomi.chars().last() else {
+                    return keep_current(clauses);
+                };
                 force_selected_clause.push(offset..offset + yomi.len() - last_char.len_utf8());
             } else if i == current_clause + 1 {
-                let prev_last_char = clauses[i - 1][0].yomi.chars().last().unwrap().len_utf8();
-                let start = offset - prev_last_char;
-                let end = start + (yomi.len() + prev_last_char);
+                let Some(prev_last_char) = clauses[i - 1][0].yomi.chars().last() else {
+                    return keep_current(clauses);
+                };
+                let prev_last_char_len = prev_last_char.len_utf8();
+                let start = offset - prev_last_char_len;
+                let end = start + (yomi.len() + prev_last_char_len);
                 // 消失するケースもある
                 if start < end {
                     force_selected_clause.push(start..end);
@@ -129,15 +136,21 @@ pub fn extend_left(clauses: &[Vec<Candidate>], current_clause: usize) -> Vec<Ran
             let yomi = &clause[0].yomi;
             let (start, end) = if i == current_clause {
                 let prev_yomi = &clauses[i - 1][0].yomi;
-                let prev_last_char = prev_yomi.chars().last().unwrap().len_utf8();
-                let start = offset - prev_last_char;
-                let end = start + yomi.len() + prev_last_char;
+                let Some(prev_last_char) = prev_yomi.chars().last() else {
+                    return keep_current(clauses);
+                };
+                let prev_last_char_len = prev_last_char.len_utf8();
+                let start = offset - prev_last_char_len;
+                let end = start + yomi.len() + prev_last_char_len;
                 (start, end)
             } else if i == current_clause - 1 {
                 // フォーカス文節の左の文節は、末尾の文字を対象から外す
-                let last_char = yomi.chars().last().unwrap().len_utf8();
+                let Some(last_char) = yomi.chars().last() else {
+                    return keep_current(clauses);
+                };
+                let last_char_len = last_char.len_utf8();
                 let start = offset;
-                let end = offset + (yomi.len() - last_char);
+                let end = offset + (yomi.len() - last_char_len);
                 // 消失するケースもある
                 (start, end)
             } else {
@@ -209,6 +222,18 @@ mod tests_right {
         let got = extend_right(&clauses, 1);
         assert_eq!(to_vec(yomi, got), vec!("あい", "ですね"));
     }
+
+    // エッジケース: 空の yomi を持つ Candidate - 現在の構成を維持する
+    #[test]
+    fn test_extend_right_empty_yomi_keeps_current() {
+        let clauses = vec![
+            vec![Candidate::new("わ", "わ", 0_f32)],
+            vec![Candidate::new("", "", 0_f32)], // 空の yomi
+        ];
+        let got = extend_right(&clauses, 0);
+        let expected = keep_current(&clauses);
+        assert_eq!(got, expected);
+    }
 }
 
 #[cfg(test)]
@@ -262,5 +287,17 @@ mod tests_left {
         let (yomi, clauses) = mk(&["や", "まと"]);
         let got = extend_left(&clauses, 1);
         assert_eq!(to_vec(yomi, got), vec!("やまと"));
+    }
+
+    // エッジケース: 空の yomi を持つ Candidate - 現在の構成を維持する
+    #[test]
+    fn test_extend_left_empty_yomi_keeps_current() {
+        let clauses = vec![
+            vec![Candidate::new("", "", 0_f32)], // 空の yomi
+            vec![Candidate::new("わ", "わ", 0_f32)],
+        ];
+        let got = extend_left(&clauses, 1);
+        let expected = keep_current(&clauses);
+        assert_eq!(got, expected);
     }
 }
