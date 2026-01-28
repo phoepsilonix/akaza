@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 
 use kelp::{hira2kata, z2h, ConvOption};
-use log::info;
+use log::{error, info};
 
 use ibus_sys::attr_list::{ibus_attr_list_append, ibus_attr_list_new};
 use ibus_sys::attribute::{
@@ -278,11 +278,19 @@ impl CurrentState {
             } else {
                 0
             };
-            if idex >= nodes.len() {
-                // 発生しないはずだが、発生している。。なぜだろう?
-                panic!("[BUG] self.node_selected and self.clauses missmatch")
-            }
-            result += &nodes[idex].surface_with_dynamic();
+
+            // インデックスが範囲外の場合、安全に0番目の候補にフォールバック
+            let safe_idex = if idex >= nodes.len() {
+                error!(
+                    "[BUG] node_selected index out of bounds: clauseid={}, idex={}, nodes.len()={}. Using index 0 as fallback.",
+                    clauseid, idex, nodes.len()
+                );
+                0
+            } else {
+                idex
+            };
+
+            result += &nodes[safe_idex].surface_with_dynamic();
         }
         result
     }
@@ -505,5 +513,94 @@ impl CurrentState {
         } else {
             (yomi + suffix.as_str(), surface + suffix.as_str())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_build_string_normal() {
+        let mut state = CurrentState::default();
+
+        // 正常な clauses と node_selected を設定
+        state.clauses = vec![
+            vec![
+                Candidate::new("わたし", "私", 0.0),
+                Candidate::new("わたし", "渡し", 1.0),
+            ],
+            vec![Candidate::new("は", "は", 0.0)],
+        ];
+        state.node_selected.insert(0, 0); // 0番目の文節の0番目の候補
+        state.node_selected.insert(1, 0); // 1番目の文節の0番目の候補
+
+        let result = state.build_string();
+        assert_eq!(result, "私は");
+    }
+
+    #[test]
+    fn test_build_string_with_selection() {
+        let mut state = CurrentState::default();
+
+        state.clauses = vec![vec![
+            Candidate::new("わたし", "私", 0.0),
+            Candidate::new("わたし", "渡し", 1.0),
+        ]];
+        state.node_selected.insert(0, 1); // 1番目の候補を選択
+
+        let result = state.build_string();
+        assert_eq!(result, "渡し");
+    }
+
+    #[test]
+    fn test_build_string_missing_node_selected() {
+        let mut state = CurrentState::default();
+
+        state.clauses = vec![vec![Candidate::new("わたし", "私", 0.0)]];
+        // node_selected に何も設定しない（不整合状態）
+
+        let result = state.build_string();
+        // デフォルトで0番目の候補が使われる
+        assert_eq!(result, "私");
+    }
+
+    #[test]
+    fn test_build_string_out_of_bounds_fallback() {
+        let mut state = CurrentState::default();
+
+        state.clauses = vec![vec![
+            Candidate::new("わたし", "私", 0.0),
+            Candidate::new("わたし", "渡し", 1.0),
+        ]];
+        state.node_selected.insert(0, 999); // 範囲外のインデックス（不整合状態）
+
+        // panicせずに0番目の候補にフォールバック
+        let result = state.build_string();
+        assert_eq!(result, "私");
+    }
+
+    #[test]
+    fn test_build_string_multiple_clauses_with_out_of_bounds() {
+        let mut state = CurrentState::default();
+
+        state.clauses = vec![
+            vec![
+                Candidate::new("わたし", "私", 0.0),
+                Candidate::new("わたし", "渡し", 1.0),
+            ],
+            vec![Candidate::new("は", "は", 0.0)],
+            vec![
+                Candidate::new("がっこう", "学校", 0.0),
+                Candidate::new("がっこう", "合校", 1.0),
+            ],
+        ];
+        state.node_selected.insert(0, 1); // 正常
+        state.node_selected.insert(1, 0); // 正常
+        state.node_selected.insert(2, 999); // 範囲外（不整合）
+
+        // 2番目の文節は0番目にフォールバック
+        let result = state.build_string();
+        assert_eq!(result, "渡しは学校");
     }
 }
