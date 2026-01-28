@@ -50,7 +50,7 @@ pub struct AkazaContext {
 }
 
 impl AkazaContext {
-    pub(crate) fn new(
+    pub fn new(
         engine: BigramWordViterbiEngine<
             MarisaSystemUnigramLM,
             MarisaSystemBigramLM,
@@ -71,7 +71,7 @@ impl AkazaContext {
     }
 
     /// Set props
-    pub(crate) fn do_property_activate(
+    pub fn do_property_activate(
         &mut self,
         engine: *mut IBusEngine,
         prop_name: String,
