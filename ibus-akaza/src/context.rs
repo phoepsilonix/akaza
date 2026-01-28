@@ -628,7 +628,10 @@ mod tests {
         // コマンドマップが空でないことを確認
         let commands = ibus_akaza_commands_map();
         assert!(!commands.is_empty(), "Command map should not be empty");
-        assert!(commands.len() > 20, "Command map should have at least 20 commands");
+        assert!(
+            commands.len() > 20,
+            "Command map should have at least 20 commands"
+        );
     }
 
     #[test]
