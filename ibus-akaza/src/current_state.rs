@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::ops::Range;
 
 use kelp::{hira2kata, z2h, ConvOption};
-use log::info;
+use log::{error, info};
 
 use ibus_sys::attr_list::{ibus_attr_list_append, ibus_attr_list_new};
 use ibus_sys::attribute::{
@@ -278,11 +278,19 @@ impl CurrentState {
             } else {
                 0
             };
-            if idex >= nodes.len() {
-                // 発生しないはずだが、発生している。。なぜだろう?
-                panic!("[BUG] self.node_selected and self.clauses missmatch")
-            }
-            result += &nodes[idex].surface_with_dynamic();
+
+            // インデックスが範囲外の場合、安全に0番目の候補にフォールバック
+            let safe_idex = if idex >= nodes.len() {
+                error!(
+                    "[BUG] node_selected index out of bounds: clauseid={}, idex={}, nodes.len()={}. Using index 0 as fallback.",
+                    clauseid, idex, nodes.len()
+                );
+                0
+            } else {
+                idex
+            };
+
+            result += &nodes[safe_idex].surface_with_dynamic();
         }
         result
     }
@@ -507,3 +515,10 @@ impl CurrentState {
         }
     }
 }
+
+// Note: build_string() のテストは、CurrentState が多くの依存関係（engine, romkan, etc）を
+// 必要とするため、ユニットテストとして書くことが困難です。
+// 代わりに、以下のような手動テストまたは統合テストで検証することを推奨します：
+// 1. 正常な変換動作の確認
+// 2. node_selected が範囲外の場合でも panic せず、0番目の候補にフォールバックすること
+// 3. error! ログが出力されること
