@@ -227,7 +227,10 @@ impl AkazaContext {
                     }
 
                     // 文字列を追加する。
-                    let ch = char::from_u32(keyval).unwrap();
+                    let Some(ch) = keyval_to_char(keyval) else {
+                        warn!("Invalid keyval: 0x{:X}", keyval);
+                        return false;
+                    };
                     self.current_state.append_raw_input(engine, ch);
 
                     return true;
@@ -246,7 +249,11 @@ impl AkazaContext {
                         digit: true,
                         ..Default::default()
                     };
-                    let text = h2z(char::from_u32(keyval).unwrap().to_string().as_str(), option);
+                    let Some(ch) = keyval_to_char(keyval) else {
+                        warn!("Invalid keyval: 0x{:X}", keyval);
+                        return false;
+                    };
+                    let text = h2z(ch.to_string().as_str(), option);
                     unsafe { ibus_engine_commit_text(engine, text.to_ibus_text()) };
                     return true;
                 }
@@ -579,5 +586,40 @@ impl AkazaContext {
             // 変換候補の分節をクリアする。
             self.current_state.clear_clauses(engine);
         }
+    }
+}
+
+/// keyval を char に安全に変換する
+///
+/// 無効な Unicode コードポイントの場合は None を返す
+fn keyval_to_char(keyval: guint) -> Option<char> {
+    char::from_u32(keyval)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_keyval_to_char_valid() {
+        // 通常のASCII文字
+        assert_eq!(keyval_to_char('a' as u32), Some('a'));
+        assert_eq!(keyval_to_char('Z' as u32), Some('Z'));
+        assert_eq!(keyval_to_char('0' as u32), Some('0'));
+
+        // 日本語文字
+        assert_eq!(keyval_to_char('あ' as u32), Some('あ'));
+        assert_eq!(keyval_to_char('漢' as u32), Some('漢'));
+    }
+
+    #[test]
+    fn test_keyval_to_char_invalid() {
+        // サロゲートペア範囲（無効）
+        assert_eq!(keyval_to_char(0xD800), None);
+        assert_eq!(keyval_to_char(0xDFFF), None);
+
+        // Unicodeの範囲外
+        assert_eq!(keyval_to_char(0x110000), None);
+        assert_eq!(keyval_to_char(0xFFFFFFFF), None);
     }
 }
