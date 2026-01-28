@@ -1,8 +1,8 @@
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap};
 
-use anyhow::Context;
-use log::{info, trace};
+use anyhow::{bail, Context};
+use log::{error, info, trace};
 
 use crate::graph::candidate::Candidate;
 use crate::graph::lattice_graph::LatticeGraph;
@@ -66,18 +66,31 @@ impl GraphResolver {
                         shortest_prev = Some(prev);
                     }
                 }
-                prevmap.insert(node, shortest_prev.unwrap());
+                let Some(prev) = shortest_prev else {
+                    bail!(
+                        "No valid previous node found for '{}' (start_pos={}, yomi={})",
+                        node.surface,
+                        node.start_pos,
+                        yomi
+                    );
+                };
+                prevmap.insert(node, prev);
                 costmap.insert(node, cost);
             }
         }
 
         // 後ろ向きに候補を探していく
+        let eos_pos = (yomi.len() + 1) as i32;
         let eos = lattice
-            .get((yomi.len() + 1) as i32)
-            .unwrap()
+            .get(eos_pos)
+            .with_context(|| format!("EOS node not found at position {}", eos_pos))?
             .first()
-            .unwrap();
-        let bos = lattice.get(0).unwrap().first().unwrap();
+            .with_context(|| format!("EOS node list is empty at position {}", eos_pos))?;
+        let bos = lattice
+            .get(0)
+            .with_context(|| "BOS node not found at position 0")?
+            .first()
+            .with_context(|| "BOS node list is empty at position 0")?;
         let mut node = eos;
         let mut result: Vec<Vec<Candidate>> = Vec::new();
         while node != bos {
@@ -88,9 +101,14 @@ impl GraphResolver {
                     self.get_candidates(node, lattice, &costmap, end_pos);
                 result.push(candidates);
             }
-            node = prevmap
-                .get(node)
-                .unwrap_or_else(|| panic!("Cannot get previous node: {}", node.surface));
+            node = prevmap.get(node).with_context(|| {
+                format!(
+                    "Cannot get previous node for '{}' (start_pos={}, yomi_len={})",
+                    node.surface,
+                    node.start_pos,
+                    node.yomi.len()
+                )
+            })?;
         }
         result.reverse();
         Ok(result)
@@ -104,9 +122,15 @@ impl GraphResolver {
         end_pos: i32,
     ) -> Vec<Candidate> {
         // end_pos で終わる単語を得る。
-        let mut strict_results: Vec<Candidate> = lattice
-            .node_list(end_pos)
-            .unwrap()
+        let Some(node_list) = lattice.node_list(end_pos) else {
+            error!(
+                "Node list not found at end_pos={} for node '{}'",
+                end_pos, node.surface
+            );
+            return Vec::new();
+        };
+
+        let mut strict_results: Vec<Candidate> = node_list
             .iter()
             .filter(|alt_node| {
                 alt_node.start_pos == node.start_pos // 同じ位置かそれより前から始まっている
@@ -115,7 +139,13 @@ impl GraphResolver {
             .map(|f| Candidate {
                 surface: f.surface.clone(),
                 yomi: f.yomi.clone(),
-                cost: *costmap.get(f).unwrap(),
+                cost: *costmap.get(f).unwrap_or_else(|| {
+                    error!(
+                        "Cost not found for node '{}' at pos {}",
+                        f.surface, f.start_pos
+                    );
+                    &f32::MAX
+                }),
                 compound_word: false,
             })
             .collect();
@@ -200,14 +230,23 @@ impl GraphResolver {
                     // 元々の候補と完全に一致しているものは除外。
                     && cur.yomi != node_yomi
             })
-            .map(|f| BreakDown {
-                node: f.clone(),
-                head_cost: (*cost_map.get(f).unwrap()), // 先頭から辿った場合のコスト
-                tail_cost: tail_cost
-                    + lattice.get_node_cost(f)
-                    + next_node
-                        .map(|nn| lattice.get_edge_cost(f, nn))
-                        .unwrap_or_else(|| lattice.get_default_edge_cost()),
+            .filter_map(|f| {
+                let head_cost = cost_map.get(f).copied().unwrap_or_else(|| {
+                    error!(
+                        "Cost not found in breakdown for node '{}' at pos {}",
+                        f.surface, f.start_pos
+                    );
+                    f32::MAX
+                });
+                Some(BreakDown {
+                    node: f.clone(),
+                    head_cost, // 先頭から辿った場合のコスト
+                    tail_cost: tail_cost
+                        + lattice.get_node_cost(f)
+                        + next_node
+                            .map(|nn| lattice.get_edge_cost(f, nn))
+                            .unwrap_or_else(|| lattice.get_default_edge_cost()),
+                })
             })
             .collect::<Vec<_>>();
         targets.sort();
@@ -229,7 +268,13 @@ impl GraphResolver {
                 target.node.yomi
             );
             if required_len < target.node.yomi.len() {
-                panic!("??? underflow: {:?}, {:?}", required_len, target.node.yomi);
+                error!(
+                    "Length underflow in breakdown: required_len={}, node.yomi.len()={}, node={}",
+                    required_len,
+                    target.node.yomi.len(),
+                    target.node.yomi
+                );
+                continue; // Skip this breakdown candidate
             }
             Self::collect_breakdown_results(
                 node_yomi,
@@ -270,7 +315,7 @@ impl Ord for BreakDown {
     fn cmp(&self, other: &Self) -> Ordering {
         (self.head_cost + self.tail_cost)
             .partial_cmp(&(other.head_cost + other.tail_cost))
-            .unwrap()
+            .unwrap_or(Ordering::Equal) // NaN の場合は Equal として扱う
     }
 }
 
