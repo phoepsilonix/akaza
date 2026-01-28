@@ -49,6 +49,7 @@ pub struct AkazaContext {
     prop_controller: PropController,
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl AkazaContext {
     #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn new(
@@ -114,6 +115,7 @@ impl AkazaContext {
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl AkazaContext {
     pub(crate) fn process_num_key(&mut self, nn: i32, engine: *mut IBusEngine) -> bool {
         let idx = if nn == 0 { 9 } else { nn - 1 };
@@ -162,6 +164,7 @@ impl AkazaContext {
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl AkazaContext {
     pub fn process_key_event(
@@ -295,6 +298,7 @@ impl Drop for AkazaContext {
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl AkazaContext {
     /**
      * 入力モードの変更
