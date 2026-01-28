@@ -54,6 +54,9 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    env:
+      DISPLAY: ":99"
+      DBUS_SESSION_BUS_ADDRESS: "unix:path=/tmp/dbus-test-session"
 
     steps:
     - uses: actions/checkout@v3
@@ -69,7 +72,19 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install ibus libgirepository1.0-dev libmarisa-dev clang libibus-1.0-dev unzip libgtk-4-dev zstd
+        sudo apt-get install -y \
+          xvfb xdotool dbus-x11 at-spi2-core \
+          ibus libibus-1.0-dev libgtk-4-dev \
+          libgirepository1.0-dev libmarisa-dev clang unzip zstd
+    - name: Start Xvfb
+      run: |
+        Xvfb :99 -screen 0 1024x768x24 &
+        sleep 2
+    - name: Start D-Bus session
+      run: |
+        dbus-daemon --session --fork \
+          --address="unix:path=/tmp/dbus-test-session"
+        sleep 1
     - name: make test data
       run: |
         cd akaza-data/ && make test-data
@@ -79,5 +94,12 @@ jobs:
     - uses: dtolnay/rust-toolchain@master
       with:
           toolchain: "1.92.0"
-    - name: Run tests
-      run: cargo test
+    - name: Run unit tests
+      run: cargo test --lib
+      timeout-minutes: 2
+    - name: Run integration tests
+      run: cargo test --test integration
+      timeout-minutes: 5
+    - name: Run all other tests
+      run: cargo test --bins --tests
+      timeout-minutes: 10
