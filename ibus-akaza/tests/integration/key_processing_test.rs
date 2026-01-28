@@ -44,7 +44,7 @@ fn test_command_names_are_consistent() {
     // 入力モード設定コマンドが全て set_input_mode_ で始まることを確認
     let mode_commands: Vec<_> = commands
         .keys()
-        .filter(|k| k.starts_with("set_input_mode_"))
+        .filter(|&k| k.starts_with("set_input_mode_"))
         .collect();
 
     assert!(
@@ -55,7 +55,7 @@ fn test_command_names_are_consistent() {
     // 数字コマンドが全て press_number_ で始まることを確認
     let number_commands: Vec<_> = commands
         .keys()
-        .filter(|k| k.starts_with("press_number_"))
+        .filter(|&k| k.starts_with("press_number_"))
         .collect();
 
     assert_eq!(
