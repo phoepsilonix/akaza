@@ -26,6 +26,7 @@ pub struct PropController {
     prop_dict: HashMap<String, *mut IBusProperty>,
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl PropController {
     pub fn new(initial_input_mode: InputMode, config: Config) -> Result<Self> {
         let (input_mode_prop, prop_list, prop_dict) = Self::init_props(initial_input_mode, config)?;

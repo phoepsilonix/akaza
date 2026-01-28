@@ -50,6 +50,7 @@ pub struct AkazaContext {
 }
 
 impl AkazaContext {
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn new(
         engine: BigramWordViterbiEngine<
             MarisaSystemUnigramLM,
@@ -71,6 +72,7 @@ impl AkazaContext {
     }
 
     /// Set props
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     pub fn do_property_activate(
         &mut self,
         engine: *mut IBusEngine,
