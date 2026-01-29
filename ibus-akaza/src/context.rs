@@ -49,8 +49,10 @@ pub struct AkazaContext {
     prop_controller: PropController,
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl AkazaContext {
-    pub(crate) fn new(
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    pub fn new(
         engine: BigramWordViterbiEngine<
             MarisaSystemUnigramLM,
             MarisaSystemBigramLM,
@@ -71,7 +73,8 @@ impl AkazaContext {
     }
 
     /// Set props
-    pub(crate) fn do_property_activate(
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
+    pub fn do_property_activate(
         &mut self,
         engine: *mut IBusEngine,
         prop_name: String,
@@ -112,6 +115,7 @@ impl AkazaContext {
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl AkazaContext {
     pub(crate) fn process_num_key(&mut self, nn: i32, engine: *mut IBusEngine) -> bool {
         let idx = if nn == 0 { 9 } else { nn - 1 };
@@ -160,6 +164,7 @@ impl AkazaContext {
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl AkazaContext {
     pub fn process_key_event(
         &mut self,
@@ -292,6 +297,7 @@ impl Drop for AkazaContext {
     }
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl AkazaContext {
     /**
      * 入力モードの変更
@@ -621,5 +627,92 @@ mod tests {
         // Unicodeの範囲外
         assert_eq!(keyval_to_char(0x110000), None);
         assert_eq!(keyval_to_char(0xFFFFFFFF), None);
+    }
+
+    #[test]
+    fn test_commands_map_not_empty() {
+        // コマンドマップが空でないことを確認
+        let commands = ibus_akaza_commands_map();
+        assert!(!commands.is_empty(), "Command map should not be empty");
+        assert!(
+            commands.len() > 20,
+            "Command map should have at least 20 commands"
+        );
+    }
+
+    #[test]
+    fn test_commands_map_contains_essential_commands() {
+        // 必須コマンドが登録されていることを確認
+        let commands = ibus_akaza_commands_map();
+
+        let essential_commands = vec![
+            "commit_candidate",
+            "commit_preedit",
+            "escape",
+            "page_up",
+            "page_down",
+            "set_input_mode_hiragana",
+            "set_input_mode_alnum",
+            "update_candidates",
+            "erase_character_before_cursor",
+            "cursor_up",
+            "cursor_down",
+            "cursor_left",
+            "cursor_right",
+        ];
+
+        for cmd in essential_commands {
+            assert!(
+                commands.contains_key(cmd),
+                "Command map should contain '{}' command",
+                cmd
+            );
+        }
+    }
+
+    #[test]
+    fn test_commands_map_contains_number_commands() {
+        // 数字キーコマンドが全て登録されていることを確認
+        let commands = ibus_akaza_commands_map();
+
+        for i in 0..=9 {
+            let cmd_name = format!("press_number_{}", i);
+            assert!(
+                commands.contains_key(cmd_name.as_str()),
+                "Command map should contain '{}' command",
+                cmd_name
+            );
+        }
+    }
+
+    #[test]
+    fn test_commands_map_contains_conversion_commands() {
+        // 変換系コマンドが登録されていることを確認
+        let commands = ibus_akaza_commands_map();
+
+        let conversion_commands = vec![
+            "convert_to_full_hiragana",
+            "convert_to_full_katakana",
+            "convert_to_half_katakana",
+            "convert_to_full_romaji",
+            "convert_to_half_romaji",
+        ];
+
+        for cmd in conversion_commands {
+            assert!(
+                commands.contains_key(cmd),
+                "Command map should contain '{}' command",
+                cmd
+            );
+        }
+    }
+
+    #[test]
+    fn test_commands_map_contains_clause_extension_commands() {
+        // 文節伸縮コマンドが登録されていることを確認
+        let commands = ibus_akaza_commands_map();
+
+        assert!(commands.contains_key("extend_clause_right"));
+        assert!(commands.contains_key("extend_clause_left"));
     }
 }

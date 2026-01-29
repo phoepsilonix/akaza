@@ -16,16 +16,8 @@ use libakaza::config::Config;
 use libakaza::engine::bigram_word_viterbi_engine::BigramWordViterbiEngineBuilder;
 use libakaza::user_side_data::user_data::UserData;
 
-use crate::context::AkazaContext;
-use crate::wrapper_bindings::{ibus_akaza_init, ibus_akaza_set_callback};
-
-mod commands;
-mod context;
-mod current_state;
-mod input_mode;
-mod keymap;
-mod ui;
-mod wrapper_bindings;
+use ibus_akaza_lib::context::AkazaContext;
+use ibus_akaza_lib::wrapper_bindings::{ibus_akaza_init, ibus_akaza_set_callback};
 
 unsafe extern "C" fn process_key_event(
     context: *mut c_void,
