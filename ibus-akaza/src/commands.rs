@@ -2,18 +2,18 @@ use std::collections::HashMap;
 
 use ibus_sys::engine::IBusEngine;
 
+use crate::context::AkazaContext;
 use crate::input_mode::{
     INPUT_MODE_ALNUM, INPUT_MODE_FULLWIDTH_ALNUM, INPUT_MODE_HALFWIDTH_KATAKANA,
     INPUT_MODE_HIRAGANA, INPUT_MODE_KATAKANA,
 };
-use crate::AkazaContext;
 
 /**
  * shortcut key を設定可能な機能。
  */
 pub type IbusAkazaCommand = fn(&mut AkazaContext, *mut IBusEngine) -> bool;
 
-pub(crate) fn ibus_akaza_commands_map() -> HashMap<&'static str, IbusAkazaCommand> {
+pub fn ibus_akaza_commands_map() -> HashMap<&'static str, IbusAkazaCommand> {
     let mut function_map: HashMap<&'static str, IbusAkazaCommand> = HashMap::new();
 
     // shorthand

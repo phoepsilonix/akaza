@@ -38,7 +38,7 @@ extern "C" {
     /// is_ibus: true if the project run with `--ibus` option.
     pub fn ibus_akaza_init(is_ibus: bool);
 
-    pub(crate) fn ibus_akaza_set_callback(
+    pub fn ibus_akaza_set_callback(
         context: *mut c_void,
         key_event_cb: ibus_akaza_callback_key_event,
         candidate_cb: ibus_akaza_callback_candidate_clicked,

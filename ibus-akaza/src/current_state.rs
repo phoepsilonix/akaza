@@ -54,6 +54,7 @@ pub struct CurrentState {
     consonant_suffix_extractor: ConsonantSuffixExtractor,
 }
 
+#[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl CurrentState {
     pub fn new(
         input_mode: InputMode,
