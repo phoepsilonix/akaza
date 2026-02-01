@@ -76,17 +76,7 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 rustup install stable
 ```
 
-### 3. モデルファイルのダウンロード
-
-最新のモデルファイルを [akaza-default-model releases](https://github.com/akaza-im/akaza-default-model/releases) からダウンロードしてください。
-
-```bash
-sudo mkdir -p /usr/share/akaza/model/default/
-curl -L https://github.com/akaza-im/akaza-default-model/releases/latest/download/akaza-default-model.tar.gz | \
-    sudo tar xzv --strip-components=1 -C /usr/share/akaza/model/default/
-```
-
-### 4. ibus-akaza のビルドとインストール
+### 3. ibus-akaza のビルドとインストール
 
 ```bash
 git clone https://github.com/akaza-im/akaza.git
@@ -95,7 +85,9 @@ make
 sudo make install
 ```
 
-### 5. IBus の再起動と有効化
+`make install` により、モデルファイル（[akaza-default-model](https://github.com/akaza-im/akaza-default-model)）のダウンロードとインストールも自動で行われます。
+
+### 4. IBus の再起動と有効化
 
 ```bash
 ibus restart
