@@ -4,6 +4,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
+use log::error;
 
 use crate::config::{DictConfig, DictEncoding, DictType, DictUsage, EngineConfig};
 use crate::dict::loader::{load_dicts, load_dicts_with_cache};
@@ -42,7 +43,10 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> HenkanEngine
     for BigramWordViterbiEngine<U, B, KD>
 {
     fn learn(&mut self, candidates: &[Candidate]) {
-        self.user_data.lock().unwrap().record_entries(candidates);
+        match self.user_data.lock() {
+            Ok(mut user_data) => user_data.record_entries(candidates),
+            Err(e) => error!("learn: failed to lock user_data: {}", e),
+        }
     }
 
     fn convert(
