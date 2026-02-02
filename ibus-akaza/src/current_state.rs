@@ -390,6 +390,9 @@ impl CurrentState {
     pub fn render_preedit(&self, engine: *mut IBusEngine) {
         unsafe {
             let preedit_attrs = ibus_attr_list_new();
+            // IBus の属性位置とカーソル位置は文字数（Unicode コードポイント数）で指定する。
+            // Rust の String::len() は UTF-8 バイト長を返すため、chars().count() を使う。
+            let preedit_char_len = self.preedit.chars().count() as guint;
             // 全部に下線をひく。
             ibus_attr_list_append(
                 preedit_attrs,
@@ -397,13 +400,13 @@ impl CurrentState {
                     IBusAttrType_IBUS_ATTR_TYPE_UNDERLINE,
                     IBusAttrUnderline_IBUS_ATTR_UNDERLINE_SINGLE,
                     0,
-                    self.preedit.len() as guint,
+                    preedit_char_len,
                 ),
             );
             let bgstart: u32 = self
                 .clauses
                 .iter()
-                .map(|c| (c[0].surface).len() as u32)
+                .map(|c| c[0].surface.chars().count() as u32)
                 .sum();
             // 背景色を設定する。
             ibus_attr_list_append(
@@ -412,7 +415,7 @@ impl CurrentState {
                     IBusAttrType_IBUS_ATTR_TYPE_BACKGROUND,
                     0x00333333,
                     bgstart,
-                    bgstart + (self.preedit.len() as u32),
+                    bgstart + (preedit_char_len as u32),
                 ),
             );
             let preedit_text = self.preedit.to_ibus_text();
@@ -420,7 +423,7 @@ impl CurrentState {
             ibus_engine_update_preedit_text(
                 engine,
                 preedit_text,
-                self.preedit.len() as guint,
+                preedit_char_len,
                 to_gboolean(!self.preedit.is_empty()),
             );
         }
