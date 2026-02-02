@@ -144,7 +144,7 @@ impl CurrentState {
 
             // 先頭が大文字なケースと、URL っぽい文字列のときは変換処理を実施しない。
             let clauses = if (!yomi.is_empty()
-                && yomi.chars().next().unwrap().is_ascii_uppercase()
+                && yomi.starts_with(|c: char| c.is_ascii_uppercase())
                 && self.force_selected_clause.is_empty())
                 || yomi.starts_with("https://")
                 || yomi.starts_with("http://")
@@ -215,9 +215,9 @@ impl CurrentState {
         self.lookup_table.clear();
 
         // 現在の未変換情報を元に、候補を算出していく。
-        if !self.clauses.is_empty() {
+        if let Some(clause) = self.clauses.get(self.current_clause) {
             // lookup table に候補を詰め込んでいく。
-            for node in &self.clauses[self.current_clause] {
+            for node in clause {
                 let candidate = &node.surface_with_dynamic();
                 self.lookup_table.append_candidate(candidate.to_ibus_text());
             }
@@ -235,6 +235,9 @@ impl CurrentState {
 
     /// 一個右の文節を選択する
     pub fn select_right_clause(&mut self, engine: *mut IBusEngine) {
+        if self.clauses.is_empty() {
+            return;
+        }
         if self.current_clause == self.clauses.len() - 1 {
             // 既に一番右だった場合、一番左にいく。
             if self.current_clause != 0 {
@@ -249,6 +252,9 @@ impl CurrentState {
 
     /// 一個左の文節を選択する
     pub fn select_left_clause(&mut self, engine: *mut IBusEngine) {
+        if self.clauses.is_empty() {
+            return;
+        }
         if self.current_clause == 0 {
             // 既に一番左だった場合、一番右にいく
             self.current_clause = self.clauses.len() - 1;
@@ -265,7 +271,12 @@ impl CurrentState {
         // 上記の様にフォーカスが当たっている時に extend_clause_left した場合
         // 文節の数がもとより減ることがある。その場合は index error になってしまうので、
         // current_clause を動かす。
-        if self.current_clause >= self.clauses.len() {
+        if self.clauses.is_empty() {
+            if self.current_clause != 0 {
+                self.current_clause = 0;
+                self.on_current_clause_change(engine);
+            }
+        } else if self.current_clause >= self.clauses.len() {
             self.current_clause = self.clauses.len() - 1;
             self.on_current_clause_change(engine);
         }
@@ -307,7 +318,9 @@ impl CurrentState {
     }
 
     pub fn on_force_selected_clause_change(&mut self, engine: *mut IBusEngine) {
-        self.henkan(engine).unwrap();
+        if let Err(e) = self.henkan(engine) {
+            error!("on_force_selected_clause_change: henkan failed: {}", e);
+        }
     }
 
     pub fn on_clauses_change(&mut self, engine: *mut IBusEngine) {
@@ -323,7 +336,9 @@ impl CurrentState {
         self.clear_force_selected_clause(engine);
 
         if self.live_conversion {
-            self.henkan(engine).unwrap();
+            if let Err(e) = self.henkan(engine) {
+                error!("on_raw_input_change: henkan failed: {}", e);
+            }
         } else if !self.clauses.is_empty() {
             self.clauses.clear();
             self.on_clauses_change(engine);
@@ -355,9 +370,12 @@ impl CurrentState {
 
     pub fn update_auxiliary_text(&mut self, engine: *mut IBusEngine) {
         // -- auxiliary text(ポップアップしてるやつのほう)
-        if !self.clauses.is_empty() {
-            let current_yomi = self.clauses[self.current_clause][0].yomi.clone();
-            self.set_auxiliary_text(engine, &current_yomi);
+        if let Some(clause) = self.clauses.get(self.current_clause) {
+            if let Some(first) = clause.first() {
+                self.set_auxiliary_text(engine, &first.yomi.clone());
+            } else {
+                self.set_auxiliary_text(engine, "");
+            }
         } else {
             self.set_auxiliary_text(engine, "");
         }
@@ -406,7 +424,8 @@ impl CurrentState {
             let bgstart: u32 = self
                 .clauses
                 .iter()
-                .map(|c| c[0].surface.chars().count() as u32)
+                .filter_map(|c| c.first())
+                .map(|c| c.surface.chars().count() as u32)
                 .sum();
             // 背景色を設定する。
             ibus_attr_list_append(
@@ -485,7 +504,7 @@ impl CurrentState {
         let preedit = self.get_raw_input().to_string();
         // 先頭文字が大文字な場合は、そのまま返す。
         // "IME" などと入力された場合は、それをそのまま返すようにする。
-        if !preedit.is_empty() && preedit.chars().next().unwrap().is_ascii_uppercase() {
+        if preedit.starts_with(|c: char| c.is_ascii_uppercase()) {
             return (preedit.clone(), preedit);
         }
 
