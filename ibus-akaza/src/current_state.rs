@@ -225,12 +225,7 @@ impl CurrentState {
     }
 
     pub fn get_first_candidates(&self) -> Vec<Candidate> {
-        let mut targets: Vec<Candidate> = Vec::new();
-        for (i, candidates) in self.clauses.iter().enumerate() {
-            let idx = self.node_selected.get(&i).unwrap_or(&0);
-            targets.push(candidates[*idx].clone());
-        }
-        targets
+        collect_first_candidates(&self.clauses, &self.node_selected)
     }
 
     /// 一個右の文節を選択する
@@ -283,28 +278,7 @@ impl CurrentState {
     }
 
     pub fn build_string(&self) -> String {
-        let mut result = String::new();
-        for (clauseid, nodes) in self.clauses.iter().enumerate() {
-            let idex = if let Some(i) = self.node_selected.get(&clauseid) {
-                *i
-            } else {
-                0
-            };
-
-            // インデックスが範囲外の場合、安全に0番目の候補にフォールバック
-            let safe_idex = if idex >= nodes.len() {
-                error!(
-                    "[BUG] node_selected index out of bounds: clauseid={}, idex={}, nodes.len()={}. Using index 0 as fallback.",
-                    clauseid, idex, nodes.len()
-                );
-                0
-            } else {
-                idex
-            };
-
-            result += &nodes[safe_idex].surface_with_dynamic();
-        }
-        result
+        build_string_from_clauses(&self.clauses, &self.node_selected)
     }
 
     pub fn extend_right(&mut self, engine: *mut IBusEngine) {
@@ -539,9 +513,180 @@ impl CurrentState {
     }
 }
 
-// Note: build_string() のテストは、CurrentState が多くの依存関係（engine, romkan, etc）を
-// 必要とするため、ユニットテストとして書くことが困難です。
-// 代わりに、以下のような手動テストまたは統合テストで検証することを推奨します：
-// 1. 正常な変換動作の確認
-// 2. node_selected が範囲外の場合でも panic せず、0番目の候補にフォールバックすること
-// 3. error! ログが出力されること
+/// clauses と node_selected から、各文節の選択された候補を集める。
+/// CurrentState に依存しないため、単体テストが可能。
+fn collect_first_candidates(
+    clauses: &[Vec<Candidate>],
+    node_selected: &HashMap<usize, usize>,
+) -> Vec<Candidate> {
+    let mut targets: Vec<Candidate> = Vec::new();
+    for (i, candidates) in clauses.iter().enumerate() {
+        if candidates.is_empty() {
+            error!(
+                "[BUG] get_first_candidates: clause {} has no candidates, skipping.",
+                i
+            );
+            continue;
+        }
+        let idx = node_selected.get(&i).unwrap_or(&0);
+        let safe_idx = if *idx >= candidates.len() {
+            error!(
+                "[BUG] get_first_candidates: node_selected index out of bounds: clause={}, idx={}, candidates.len()={}. Using index 0 as fallback.",
+                i, idx, candidates.len()
+            );
+            0
+        } else {
+            *idx
+        };
+        targets.push(candidates[safe_idx].clone());
+    }
+    targets
+}
+
+/// clauses と node_selected から、変換結果の文字列を構築する。
+/// CurrentState に依存しないため、単体テストが可能。
+fn build_string_from_clauses(
+    clauses: &[Vec<Candidate>],
+    node_selected: &HashMap<usize, usize>,
+) -> String {
+    let mut result = String::new();
+    for (clauseid, nodes) in clauses.iter().enumerate() {
+        let idex = if let Some(i) = node_selected.get(&clauseid) {
+            *i
+        } else {
+            0
+        };
+
+        // インデックスが範囲外の場合、安全に0番目の候補にフォールバック
+        let safe_idex = if idex >= nodes.len() {
+            error!(
+                "[BUG] node_selected index out of bounds: clauseid={}, idex={}, nodes.len()={}. Using index 0 as fallback.",
+                clauseid, idex, nodes.len()
+            );
+            0
+        } else {
+            idex
+        };
+
+        result += &nodes[safe_idex].surface_with_dynamic();
+    }
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn candidate(yomi: &str, surface: &str) -> Candidate {
+        Candidate::new(yomi, surface, 0_f32)
+    }
+
+    // --- collect_first_candidates tests ---
+
+    #[test]
+    fn test_collect_first_candidates_normal() {
+        let clauses = vec![
+            vec![candidate("きょう", "今日"), candidate("きょう", "京")],
+            vec![candidate("は", "は"), candidate("は", "葉")],
+        ];
+        let node_selected = HashMap::new();
+        let result = collect_first_candidates(&clauses, &node_selected);
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].surface, "今日");
+        assert_eq!(result[1].surface, "は");
+    }
+
+    #[test]
+    fn test_collect_first_candidates_with_selection() {
+        let clauses = vec![
+            vec![candidate("きょう", "今日"), candidate("きょう", "京")],
+            vec![candidate("は", "は"), candidate("は", "葉")],
+        ];
+        let mut node_selected = HashMap::new();
+        node_selected.insert(0, 1); // 2番目の候補を選択
+        let result = collect_first_candidates(&clauses, &node_selected);
+        assert_eq!(result[0].surface, "京");
+        assert_eq!(result[1].surface, "は");
+    }
+
+    #[test]
+    fn test_collect_first_candidates_index_out_of_bounds() {
+        let clauses = vec![vec![candidate("きょう", "今日")]];
+        let mut node_selected = HashMap::new();
+        node_selected.insert(0, 99); // 範囲外
+        let result = collect_first_candidates(&clauses, &node_selected);
+        // panic せず、0番目にフォールバック
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].surface, "今日");
+    }
+
+    #[test]
+    fn test_collect_first_candidates_empty_clause() {
+        let clauses: Vec<Vec<Candidate>> = vec![
+            vec![candidate("きょう", "今日")],
+            vec![], // 空の文節
+            vec![candidate("です", "です")],
+        ];
+        let node_selected = HashMap::new();
+        let result = collect_first_candidates(&clauses, &node_selected);
+        // 空の文節はスキップされる
+        assert_eq!(result.len(), 2);
+        assert_eq!(result[0].surface, "今日");
+        assert_eq!(result[1].surface, "です");
+    }
+
+    #[test]
+    fn test_collect_first_candidates_empty_clauses() {
+        let clauses: Vec<Vec<Candidate>> = vec![];
+        let node_selected = HashMap::new();
+        let result = collect_first_candidates(&clauses, &node_selected);
+        assert!(result.is_empty());
+    }
+
+    // --- build_string_from_clauses tests ---
+
+    #[test]
+    fn test_build_string_normal() {
+        let clauses = vec![
+            vec![candidate("きょう", "今日"), candidate("きょう", "京")],
+            vec![candidate("は", "は")],
+        ];
+        let node_selected = HashMap::new();
+        let result = build_string_from_clauses(&clauses, &node_selected);
+        assert_eq!(result, "今日は");
+    }
+
+    #[test]
+    fn test_build_string_with_selection() {
+        let clauses = vec![
+            vec![candidate("きょう", "今日"), candidate("きょう", "京")],
+            vec![candidate("は", "は"), candidate("は", "葉")],
+        ];
+        let mut node_selected = HashMap::new();
+        node_selected.insert(0, 1);
+        node_selected.insert(1, 1);
+        let result = build_string_from_clauses(&clauses, &node_selected);
+        assert_eq!(result, "京葉");
+    }
+
+    #[test]
+    fn test_build_string_index_out_of_bounds() {
+        let clauses = vec![
+            vec![candidate("きょう", "今日")],
+            vec![candidate("は", "は")],
+        ];
+        let mut node_selected = HashMap::new();
+        node_selected.insert(0, 50); // 範囲外
+        let result = build_string_from_clauses(&clauses, &node_selected);
+        // panic せず、0番目にフォールバック
+        assert_eq!(result, "今日は");
+    }
+
+    #[test]
+    fn test_build_string_empty_clauses() {
+        let clauses: Vec<Vec<Candidate>> = vec![];
+        let node_selected = HashMap::new();
+        let result = build_string_from_clauses(&clauses, &node_selected);
+        assert_eq!(result, "");
+    }
+}
