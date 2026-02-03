@@ -130,6 +130,7 @@ pub fn load_dict(dict: &DictConfig) -> Result<HashMap<String, Vec<String>>> {
 mod tests {
     use std::collections::HashSet;
     use std::io::Write;
+    use std::sync::{Mutex, OnceLock};
     use std::{env, thread, time};
 
     use crate::config::DictUsage;
@@ -139,8 +140,37 @@ mod tests {
 
     use super::*;
 
+    struct EnvVarGuard {
+        key: &'static str,
+        prev: Option<String>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &std::path::Path) -> Self {
+            let prev = env::var(key).ok();
+            env::set_var(key, value);
+            Self { key, prev }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            if let Some(value) = &self.prev {
+                env::set_var(self.key, value);
+            } else {
+                env::remove_var(self.key);
+            }
+        }
+    }
+
+    fn env_lock() -> &'static Mutex<()> {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        LOCK.get_or_init(|| Mutex::new(()))
+    }
+
     #[test]
     fn test_load_dict_ex() -> Result<()> {
+        let _lock = env_lock().lock().unwrap();
         let _ = env_logger::builder()
             .filter_level(LevelFilter::Info)
             .is_test(true)
@@ -150,7 +180,7 @@ mod tests {
 
         let cachedir = tempdir()?;
         info!("tmpdir: {}", cachedir.path().to_str().unwrap());
-        env::set_var("XDG_CACHE_HOME", cachedir.path().to_str().unwrap());
+        let _env_guard = EnvVarGuard::set("XDG_CACHE_HOME", cachedir.path());
 
         {
             let mut fp = File::create(dictfile.path())?;
@@ -231,6 +261,7 @@ mod tests {
     /// 書き換えられたら読み直す。
     #[test]
     fn test_if_config_was_changed() -> Result<()> {
+        let _lock = env_lock().lock().unwrap();
         let _ = env_logger::builder()
             .filter_level(LevelFilter::Info)
             .is_test(true)
@@ -241,7 +272,7 @@ mod tests {
 
         let cachedir = tempdir()?;
         info!("tmpdir: {}", cachedir.path().to_str().unwrap());
-        env::set_var("XDG_CACHE_HOME", cachedir.path().to_str().unwrap());
+        let _env_guard = EnvVarGuard::set("XDG_CACHE_HOME", cachedir.path());
 
         {
             let mut fp = File::create(dict1.path())?;

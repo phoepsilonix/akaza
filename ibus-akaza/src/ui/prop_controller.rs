@@ -123,14 +123,14 @@ impl PropController {
 
         let props = g_object_ref_sink(ibus_prop_list_new() as gpointer) as *mut IBusPropList;
         for dict in Self::find_user_dicts(config)? {
+            let label = Path::new(&dict.path)
+                .file_name()
+                .map(|name| name.to_string_lossy().to_string())
+                .unwrap_or_else(|| dict.path.clone());
             let prop = g_object_ref_sink(ibus_property_new(
                 ("UserDict.".to_string() + dict.path.as_str() + "\0").as_ptr() as *const gchar,
                 IBusPropType_PROP_TYPE_MENU,
-                Path::new(&dict.path)
-                    .file_name()
-                    .unwrap()
-                    .to_string_lossy()
-                    .to_ibus_text(),
+                label.to_ibus_text(),
                 c"".as_ptr() as *const gchar,
                 std::ptr::null_mut() as *mut IBusText,
                 to_gboolean(true),
