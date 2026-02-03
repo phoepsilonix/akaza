@@ -34,7 +34,10 @@ pub struct IBusKeyMap {
 
 impl IBusKeyMap {
     fn to_ibus_key(s: &str) -> guint {
-        let cs = CString::new(s.to_string()).unwrap();
+        let Ok(cs) = CString::new(s.to_string()) else {
+            error!("Key contains NUL byte: {:?}", s);
+            return IBUS_KEY_VoidSymbol;
+        };
         unsafe { ibus_keyval_from_name(cs.as_ptr()) }
     }
 
