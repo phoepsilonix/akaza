@@ -131,11 +131,7 @@ impl MarisaSystemUnigramLM {
             if let Some(idx) = word.iter().position(|f| *f == b'\xff') {
                 let start = idx + 1;
                 if word.len() < start + 4 {
-                    warn!(
-                        "Malformed unigram entry: len={}, idx={}",
-                        word.len(),
-                        idx
-                    );
+                    warn!("Malformed unigram entry: len={}, idx={}", word.len(), idx);
                     return None;
                 }
                 let bytes: [u8; 4] = word[start..start + 4].try_into().ok()?;

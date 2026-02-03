@@ -116,7 +116,10 @@ impl Keymap {
             let mut map = HashMap::new();
             for (pattern, command) in got.to_map()? {
                 let Some(command) = command else {
-                    warn!("Ignored null command in keymap without extends: {:?}", pattern);
+                    warn!(
+                        "Ignored null command in keymap without extends: {:?}",
+                        pattern
+                    );
                     continue;
                 };
                 map.insert(pattern, command);
