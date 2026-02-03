@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
+use log::error;
 
 use ibus_sys::core::to_gboolean;
 use ibus_sys::engine::{ibus_engine_register_properties, ibus_engine_update_property, IBusEngine};
@@ -187,7 +188,8 @@ impl PropController {
 
         // 有効化する input mode のメニュー項目にチェックを入れる。
         let Some(property) = self.prop_dict.get(input_mode.prop_name) else {
-            panic!("Unknown input mode: {input_mode:?}");
+            error!("Unknown input mode: {input_mode:?}");
+            return;
         };
         unsafe {
             ibus_property_set_state(*property, IBusPropState_PROP_STATE_CHECKED);

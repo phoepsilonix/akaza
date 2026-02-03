@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use ibus_sys::engine::IBusEngine;
 
+use log::error;
+
 use crate::context::AkazaContext;
 use crate::input_mode::{
     INPUT_MODE_ALNUM, INPUT_MODE_FULLWIDTH_ALNUM, INPUT_MODE_HALFWIDTH_KATAKANA,
@@ -86,31 +88,52 @@ pub fn ibus_akaza_commands_map() -> HashMap<&'static str, IbusAkazaCommand> {
         true
     });
     register("extend_clause_right", |context, engine| {
-        context.extend_clause_right(engine).unwrap();
+        if let Err(e) = context.extend_clause_right(engine) {
+            error!("extend_clause_right failed: {}", e);
+            return false;
+        }
         true
     });
     register("extend_clause_left", |context, engine| {
-        context.extend_clause_left(engine).unwrap();
+        if let Err(e) = context.extend_clause_left(engine) {
+            error!("extend_clause_left failed: {}", e);
+            return false;
+        }
         true
     });
     register("convert_to_full_hiragana", |context, engine| {
-        context.convert_to_full_hiragana(engine).unwrap();
+        if let Err(e) = context.convert_to_full_hiragana(engine) {
+            error!("convert_to_full_hiragana failed: {}", e);
+            return false;
+        }
         true
     });
     register("convert_to_full_katakana", |context, engine| {
-        context.convert_to_full_katakana(engine).unwrap();
+        if let Err(e) = context.convert_to_full_katakana(engine) {
+            error!("convert_to_full_katakana failed: {}", e);
+            return false;
+        }
         true
     });
     register("convert_to_half_katakana", |context, engine| {
-        context.convert_to_half_katakana(engine).unwrap();
+        if let Err(e) = context.convert_to_half_katakana(engine) {
+            error!("convert_to_half_katakana failed: {}", e);
+            return false;
+        }
         true
     });
     register("convert_to_full_romaji", |context, engine| {
-        context.convert_to_full_romaji(engine).unwrap();
+        if let Err(e) = context.convert_to_full_romaji(engine) {
+            error!("convert_to_full_romaji failed: {}", e);
+            return false;
+        }
         true
     });
     register("convert_to_half_romaji", |context, engine| {
-        context.convert_to_half_romaji(engine).unwrap();
+        if let Err(e) = context.convert_to_half_romaji(engine) {
+            error!("convert_to_half_romaji failed: {}", e);
+            return false;
+        }
         true
     });
 
