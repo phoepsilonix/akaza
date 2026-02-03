@@ -408,14 +408,19 @@ impl CurrentState {
                 .iter()
                 .map(|c| c[0].surface.chars().count() as u32)
                 .sum();
-            // 背景色を設定する。
+            // 背景色を設定する（bgstart から preedit 末尾まで）。
+            // end_index は preedit 全体の文字数を超えてはならない。
+            // 以前は bgstart + preedit_char_len としていたため、プリエディット文字列の
+            // 長さを超える属性範囲が VTE (libvte) に渡り、fudge_pango_colors() 内で
+            // 整数アンダーフローによるスタックオーバーフローを引き起こし、
+            // gnome-terminal が SIGSEGV でクラッシュしていた。
             ibus_attr_list_append(
                 preedit_attrs,
                 ibus_attribute_new(
                     IBusAttrType_IBUS_ATTR_TYPE_BACKGROUND,
                     0x00333333,
                     bgstart,
-                    bgstart + (preedit_char_len as u32),
+                    preedit_char_len,
                 ),
             );
             let preedit_text = self.preedit.to_ibus_text();
