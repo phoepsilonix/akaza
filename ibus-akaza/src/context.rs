@@ -356,17 +356,26 @@ impl AkazaContext {
             return false;
         }
 
-        self.current_state.henkan(engine).unwrap();
+        if let Err(e) = self.current_state.henkan(engine) {
+            error!("update_candidates: henkan failed: {}", e);
+            return false;
+        }
         if self.current_state.clauses.is_empty() {
             // たぶん到達しないはず
             return true;
         }
 
         // -- auxiliary text(ポップアップしてるやつのほう)
-        let current_yomi = self.current_state.clauses[self.current_state.current_clause][0]
-            .yomi
-            .clone();
-        self.current_state.set_auxiliary_text(engine, &current_yomi);
+        if let Some(clause) = self
+            .current_state
+            .clauses
+            .get(self.current_state.current_clause)
+        {
+            if let Some(first) = clause.first() {
+                let current_yomi = first.yomi.clone();
+                self.current_state.set_auxiliary_text(engine, &current_yomi);
+            }
+        }
 
         // 明示的に変換しているので、lookup table を表示する。
         self.current_state.update_lookup_table(engine, true);
@@ -408,7 +417,7 @@ impl AkazaContext {
     }
 
     pub fn page_down(&mut self, engine: *mut IBusEngine) -> bool {
-        if self.current_state.lookup_table.page_up() {
+        if self.current_state.lookup_table.page_down() {
             let cursor_pos = self.current_state.lookup_table.get_cursor_pos() as usize;
             self.current_state.select_candidate(engine, cursor_pos);
             // lookup table の表示を更新する
@@ -444,10 +453,16 @@ impl AkazaContext {
         self.current_state.extend_right(engine);
 
         // -- auxiliary text(ポップアップしてるやつのほう)
-        let current_yomi = self.current_state.clauses[self.current_state.current_clause][0]
-            .yomi
-            .clone();
-        self.current_state.set_auxiliary_text(engine, &current_yomi);
+        if let Some(clause) = self
+            .current_state
+            .clauses
+            .get(self.current_state.current_clause)
+        {
+            if let Some(first) = clause.first() {
+                let current_yomi = first.yomi.clone();
+                self.current_state.set_auxiliary_text(engine, &current_yomi);
+            }
+        }
 
         Ok(())
     }
@@ -457,10 +472,16 @@ impl AkazaContext {
         self.current_state.extend_left(engine);
 
         // -- auxiliary text(ポップアップしてるやつのほう)
-        let current_yomi = self.current_state.clauses[self.current_state.current_clause][0]
-            .yomi
-            .clone();
-        self.current_state.set_auxiliary_text(engine, &current_yomi);
+        if let Some(clause) = self
+            .current_state
+            .clauses
+            .get(self.current_state.current_clause)
+        {
+            if let Some(first) = clause.first() {
+                let current_yomi = first.yomi.clone();
+                self.current_state.set_auxiliary_text(engine, &current_yomi);
+            }
+        }
 
         Ok(())
     }
