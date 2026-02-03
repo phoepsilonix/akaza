@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
     # GTK4とその他の依存関係
     libgtk-4-dev libgirepository1.0-dev libmarisa-dev \
     # ビルドツール
-    clang unzip zstd \
+    clang unzip zstd wget \
     # Rust toolchain
     curl git build-essential \
     && rm -rf /var/lib/apt/lists/*

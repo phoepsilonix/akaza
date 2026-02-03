@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
-use log::{debug, info, trace};
+use log::{debug, info, trace, warn};
 use regex::Regex;
 
 use crate::kana_trie::base::KanaTrie;
@@ -64,10 +64,15 @@ impl Segmenter {
         if let Some(force_ranges) = force_ranges {
             if !force_ranges.is_empty() {
                 for force_range in force_ranges {
-                    trace!(
-                        "force_range detected: {}",
-                        &yomi[force_range.start..force_range.end]
-                    );
+                    if let Some(selected) = yomi.get(force_range.start..force_range.end) {
+                        trace!("force_range detected: {}", selected);
+                    } else {
+                        warn!(
+                            "Invalid force_range: {:?} for yomi(len={})",
+                            force_range,
+                            yomi.len()
+                        );
+                    }
                 }
             }
         }
@@ -91,9 +96,17 @@ impl Segmenter {
                 for force_range in force_ranges {
                     if force_range.start == start_pos {
                         trace!("force_range detected.");
+                        let Some(selected) = yomi.get(force_range.start..force_range.end) else {
+                            warn!(
+                                "Invalid force_range: {:?} for yomi(len={})",
+                                force_range,
+                                yomi.len()
+                            );
+                            continue 'queue_processing;
+                        };
                         let vec = words_ends_at.entry(force_range.end).or_default();
-                        vec.push(yomi[force_range.start..force_range.end].to_string());
-                        queue.push(start_pos + force_range.len());
+                        vec.push(selected.to_string());
+                        queue.push(start_pos + selected.len());
                         continue 'queue_processing;
                     }
                     if force_range.contains(&start_pos) {

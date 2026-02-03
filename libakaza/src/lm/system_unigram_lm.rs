@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::{bail, Result};
-use log::info;
+use log::{info, warn};
 
 use rsmarisa::{Agent, Keyset, Trie};
 
@@ -71,10 +71,15 @@ impl MarisaSystemUnigramLMBuilder {
         let mut keyset = self.keyset()?;
         let mut trie = Trie::new();
         trie.build(&mut keyset, 0);
-        let (_, total_words) =
-            MarisaSystemUnigramLM::find_from_trie(&trie, TOTAL_WORDS_KEY).unwrap();
-        let (_, unique_words) =
-            MarisaSystemUnigramLM::find_from_trie(&trie, UNIQUE_WORDS_KEY).unwrap();
+        let Some((_, total_words)) = MarisaSystemUnigramLM::find_from_trie(&trie, TOTAL_WORDS_KEY)
+        else {
+            bail!("Missing key for {}", TOTAL_WORDS_KEY);
+        };
+        let Some((_, unique_words)) =
+            MarisaSystemUnigramLM::find_from_trie(&trie, UNIQUE_WORDS_KEY)
+        else {
+            bail!("Missing key for {}", UNIQUE_WORDS_KEY);
+        };
         Ok(MarisaSystemUnigramLM {
             trie,
             total_words: total_words as u32,
@@ -124,7 +129,16 @@ impl MarisaSystemUnigramLM {
             let kanji_id = agent.key().id();
 
             if let Some(idx) = word.iter().position(|f| *f == b'\xff') {
-                let bytes: [u8; 4] = word[idx + 1..idx + 1 + 4].try_into().unwrap();
+                let start = idx + 1;
+                if word.len() < start + 4 {
+                    warn!(
+                        "Malformed unigram entry: len={}, idx={}",
+                        word.len(),
+                        idx
+                    );
+                    return None;
+                }
+                let bytes: [u8; 4] = word[start..start + 4].try_into().ok()?;
                 let score = f32::from_le_bytes(bytes);
                 return Some((kanji_id as i32, score));
             }
@@ -153,10 +167,16 @@ impl SystemUnigramLM for MarisaSystemUnigramLM {
             let id = agent.key().id();
 
             if let Some(idx) = word.iter().position(|f| *f == b'\xff') {
-                let bytes: [u8; 4] = word[idx + 1..idx + 1 + 4].try_into().unwrap();
-                let word_str = String::from_utf8_lossy(&word[0..idx]);
-                let cost = f32::from_le_bytes(bytes);
-                map.insert(word_str.to_string(), (id as i32, cost));
+                let start = idx + 1;
+                if word.len() >= start + 4 {
+                    let bytes: [u8; 4] = match word[start..start + 4].try_into() {
+                        Ok(bytes) => bytes,
+                        Err(_) => continue,
+                    };
+                    let word_str = String::from_utf8_lossy(&word[0..idx]);
+                    let cost = f32::from_le_bytes(bytes);
+                    map.insert(word_str.to_string(), (id as i32, cost));
+                }
             }
         }
         map
