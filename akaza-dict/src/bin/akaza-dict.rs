@@ -12,6 +12,9 @@ fn main() -> Result<()> {
         .try_init();
 
     let args: Vec<String> = env::args().collect();
+    if args.len() < 2 {
+        anyhow::bail!("Usage: akaza-dict <user_dict_path>");
+    }
     open_userdict_window(&args[1])?;
     Ok(())
 }
