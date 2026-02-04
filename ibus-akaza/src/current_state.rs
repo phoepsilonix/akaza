@@ -179,7 +179,11 @@ impl CurrentState {
         if self.clauses != clause {
             self.clauses = clause;
             self.clear_node_selected(engine);
-            self.clear_current_clause(engine);
+            // When force_selected_clause is active (e.g. Shift+→/←),
+            // keep the current clause selection to match typical IME behavior.
+            if self.force_selected_clause.is_empty() {
+                self.clear_current_clause(engine);
+            }
             self.on_clauses_change(engine);
         }
     }
