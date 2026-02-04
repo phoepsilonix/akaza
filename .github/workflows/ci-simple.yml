@@ -41,16 +41,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         submodules: true
-    - uses: dtolnay/rust-toolchain@master
+    - uses: EmbarkStudios/cargo-deny-action@v2
       with:
-          toolchain: "1.92.0"
-    - name: Install cargo-deny
-      run: cargo install --locked cargo-deny --version 0.19.0
-    - name: Run cargo-deny
-      run: cargo deny check
+        rust-version: "1.92.0"
+        command: check
 
   test:
     runs-on: ubuntu-latest
