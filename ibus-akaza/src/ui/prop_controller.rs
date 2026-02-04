@@ -29,6 +29,12 @@ pub struct PropController {
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl PropController {
+    type InitPropsResult = (
+        *mut IBusProperty,
+        *mut IBusPropList,
+        HashMap<String, *mut IBusProperty>,
+    );
+
     pub fn new(initial_input_mode: InputMode, config: Config) -> Result<Self> {
         let (input_mode_prop, prop_list, prop_dict) = Self::init_props(initial_input_mode, config)?;
 
@@ -49,14 +55,7 @@ impl PropController {
     /// タスクメニューからポップアップして選べるメニューを構築する。
     ///
     /// * `initial_input_mode`: 初期状態の input_mode
-    fn init_props(
-        initial_input_mode: InputMode,
-        config: Config,
-    ) -> Result<(
-        *mut IBusProperty,
-        *mut IBusPropList,
-        HashMap<String, *mut IBusProperty>,
-    )> {
+    fn init_props(initial_input_mode: InputMode, config: Config) -> Result<Self::InitPropsResult> {
         unsafe {
             let prop_list =
                 g_object_ref_sink(ibus_prop_list_new() as gpointer) as *mut IBusPropList;
