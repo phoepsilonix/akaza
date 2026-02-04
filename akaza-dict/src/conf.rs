@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
@@ -24,6 +24,7 @@ use libakaza::dict::skk::write::write_skk_dict;
 
 thread_local! {
     static APP: RefCell<Option<Application>> = RefCell::new(None);
+    static GTK_INITIALIZED: Cell<bool> = Cell::new(false);
 }
 
 pub fn open_userdict_window(user_dict_path: &str) -> Result<()> {
@@ -47,9 +48,20 @@ pub fn open_userdict_window_in_process(user_dict_path: &str) -> Result<()> {
         let app = app.get_or_insert_with(|| {
             Application::new(Some("com.github.akaza.dict"), ApplicationFlags::empty())
         });
+        ensure_gtk_initialized()?;
         connect_activate(app, config, user_dict_path)
     })?;
     Ok(())
+}
+
+fn ensure_gtk_initialized() -> Result<()> {
+    GTK_INITIALIZED.with(|initialized| {
+        if !initialized.get() {
+            gtk::init()?;
+            initialized.set(true);
+        }
+        Ok(())
+    })
 }
 
 fn connect_activate(
