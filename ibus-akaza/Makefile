@@ -27,7 +27,7 @@ akaza.xml: akaza.xml.in
 
 akaza-debug.xml: akaza.xml.in
 	sed \
-	    -e "s:@BINARY@:$(MKFILE_DIR)/ibus-akaza-debug.sh:g" \
+	    -e "s:@BINARY@:$(MKFILE_DIR)/ibus-akaza-debug-engine.sh:g" \
 	    -e "s:@DATADIR@:$(DATADIR)/:g" $< > $@
 
 install: akaza.xml config.h ../target/release/ibus-akaza
@@ -54,4 +54,3 @@ clean:
 	rm -f akaza.xml config.h
 
 .PHONY: all test install uninstall clean install-debug
-
