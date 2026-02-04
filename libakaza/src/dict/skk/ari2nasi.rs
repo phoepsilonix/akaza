@@ -386,16 +386,15 @@ mod tests {
     fn test_expand_okuri() -> anyhow::Result<()> {
         let ari2nasi = Ari2Nasi::default();
         let got = ari2nasi.expand_okuri("あいしあw", &["愛し合".to_string()])?;
+        let expected = [
+            ("あいしあわ".to_string(), vec!["愛し合わ".to_string()]),
+            ("あいしあうぃ".to_string(), vec!["愛し合うぃ".to_string()]),
+            ("あいしあうぇ".to_string(), vec!["愛し合うぇ".to_string()]),
+            ("あいしあを".to_string(), vec!["愛し合を".to_string()]),
+        ];
         assert_eq!(
             got.iter().collect::<HashSet<_>>(),
-            vec!(
-                ("あいしあわ".to_string(), vec!("愛し合わ".to_string())),
-                ("あいしあうぃ".to_string(), vec!("愛し合うぃ".to_string())),
-                ("あいしあうぇ".to_string(), vec!("愛し合うぇ".to_string())),
-                ("あいしあを".to_string(), vec!("愛し合を".to_string()))
-            )
-            .iter()
-            .collect::<HashSet<_>>(),
+            expected.iter().collect::<HashSet<_>>(),
         );
         Ok(())
     }
@@ -404,7 +403,7 @@ mod tests {
     fn test_expand_okuri_iu() -> anyhow::Result<()> {
         let ari2nasi = Ari2Nasi::default();
         let got = ari2nasi.expand_okuri("いu", &["言".to_string()])?;
-        assert_eq!(got, vec!(("いう".to_string(), vec!("言う".to_string())),),);
+        assert_eq!(got, vec![("いう".to_string(), vec!["言う".to_string()])]);
         Ok(())
     }
 }

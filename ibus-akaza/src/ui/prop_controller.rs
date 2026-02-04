@@ -18,6 +18,13 @@ use libakaza::config::{Config, DictConfig, DictEncoding, DictType, DictUsage};
 
 use crate::input_mode::{get_all_input_modes, InputMode};
 
+type InitPropsResult = (
+    *mut IBusProperty,
+    *mut IBusPropList,
+    HashMap<String, *mut IBusProperty>,
+    HashMap<String, String>,
+);
+
 pub struct PropController {
     prop_list: *mut IBusPropList,
     /// input mode のメニューの親プロパティ。
@@ -52,15 +59,7 @@ impl PropController {
     /// タスクメニューからポップアップして選べるメニューを構築する。
     ///
     /// * `initial_input_mode`: 初期状態の input_mode
-    fn init_props(
-        initial_input_mode: InputMode,
-        config: Config,
-    ) -> Result<(
-        *mut IBusProperty,
-        *mut IBusPropList,
-        HashMap<String, *mut IBusProperty>,
-        HashMap<String, String>,
-    )> {
+    fn init_props(initial_input_mode: InputMode, config: Config) -> Result<InitPropsResult> {
         unsafe {
             let prop_list =
                 g_object_ref_sink(ibus_prop_list_new() as gpointer) as *mut IBusPropList;

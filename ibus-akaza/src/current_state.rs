@@ -22,6 +22,7 @@ use libakaza::consonant::ConsonantSuffixExtractor;
 use libakaza::engine::base::HenkanEngine;
 use libakaza::engine::bigram_word_viterbi_engine::BigramWordViterbiEngine;
 use libakaza::extend_clause::{extend_left, extend_right};
+// 文節伸縮・選択の仕様は docs/clause-extension-behavior.md を参照。
 use libakaza::graph::candidate::Candidate;
 use libakaza::kana_kanji::marisa_kana_kanji_dict::MarisaKanaKanjiDict;
 use libakaza::keymap::KeyState;
@@ -52,6 +53,23 @@ pub struct CurrentState {
     pub(crate) engine:
         BigramWordViterbiEngine<MarisaSystemUnigramLM, MarisaSystemBigramLM, MarisaKanaKanjiDict>,
     consonant_suffix_extractor: ConsonantSuffixExtractor,
+}
+
+fn next_clause_index(current: usize, len: usize, dir: i32) -> usize {
+    if len <= 1 {
+        return 0;
+    }
+    if dir >= 0 {
+        if current + 1 >= len {
+            0
+        } else {
+            current + 1
+        }
+    } else if current == 0 {
+        len - 1
+    } else {
+        current - 1
+    }
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
@@ -179,7 +197,11 @@ impl CurrentState {
         if self.clauses != clause {
             self.clauses = clause;
             self.clear_node_selected(engine);
-            self.clear_current_clause(engine);
+            // When force_selected_clause is active (e.g. Shift+→/←),
+            // keep the current clause selection to match typical IME behavior.
+            if self.force_selected_clause.is_empty() {
+                self.clear_current_clause(engine);
+            }
             self.on_clauses_change(engine);
         }
     }
@@ -233,14 +255,9 @@ impl CurrentState {
         if self.clauses.is_empty() {
             return;
         }
-        if self.current_clause == self.clauses.len() - 1 {
-            // 既に一番右だった場合、一番左にいく。
-            if self.current_clause != 0 {
-                self.current_clause = 0;
-                self.on_current_clause_change(engine);
-            }
-        } else {
-            self.current_clause += 1;
+        let next = next_clause_index(self.current_clause, self.clauses.len(), 1);
+        if next != self.current_clause {
+            self.current_clause = next;
             self.on_current_clause_change(engine);
         }
     }
@@ -250,12 +267,9 @@ impl CurrentState {
         if self.clauses.is_empty() {
             return;
         }
-        if self.current_clause == 0 {
-            // 既に一番左だった場合、一番右にいく
-            self.current_clause = self.clauses.len() - 1;
-            self.on_current_clause_change(engine);
-        } else {
-            self.current_clause -= 1;
+        let next = next_clause_index(self.current_clause, self.clauses.len(), -1);
+        if next != self.current_clause {
+            self.current_clause = next;
             self.on_current_clause_change(engine);
         }
     }
@@ -693,5 +707,23 @@ mod tests {
         let node_selected = HashMap::new();
         let result = build_string_from_clauses(&clauses, &node_selected);
         assert_eq!(result, "");
+    }
+
+    #[test]
+    fn test_next_clause_index_right_wraps() {
+        assert_eq!(next_clause_index(0, 2, 1), 1);
+        assert_eq!(next_clause_index(1, 2, 1), 0);
+    }
+
+    #[test]
+    fn test_next_clause_index_left_wraps() {
+        assert_eq!(next_clause_index(0, 2, -1), 1);
+        assert_eq!(next_clause_index(1, 2, -1), 0);
+    }
+
+    #[test]
+    fn test_next_clause_index_single() {
+        assert_eq!(next_clause_index(0, 1, 1), 0);
+        assert_eq!(next_clause_index(0, 1, -1), 0);
     }
 }
