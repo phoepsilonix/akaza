@@ -94,6 +94,8 @@ ibus restart
 ibus engine akaza
 ```
 
+※ 再ログインは不要です。必要な場合は `ibus restart` で再起動できます。
+
 または、IBus の設定画面から Akaza を追加してください。
 
 ## 設定方法
@@ -225,4 +227,3 @@ MIT License
 * [ibus-uniemoji](https://github.com/salty-horse/ibus-uniemoji) を参考に初期の実装を行いました
 * [日本語入力を支える技術](https://gihyo.jp/book/2012/978-4-7741-4993-6) を読み込んで実装しました。この本がなかったら実装しようと思わなかったと思います
 * 形態素解析器 [Vibrato](https://github.com/daac-tools/vibrato) を使用しています
-
