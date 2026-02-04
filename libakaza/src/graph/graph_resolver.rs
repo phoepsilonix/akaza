@@ -700,7 +700,7 @@ mod tests {
         assert!(!result.is_empty());
 
         // 最上位候補を確認
-        let top_surface = result[0].iter().next().unwrap().surface.as_str();
+        let top_surface = result[0].first().unwrap().surface.as_str();
         // いずれかの候補が最上位に来る
         assert!(top_surface == "橋" || top_surface == "箸" || top_surface == "端");
 
@@ -745,7 +745,7 @@ mod tests {
         let result = resolver.resolve(&lattice)?;
 
         // ユーザー学習により "箸" が最上位に来ることを確認
-        let top_surface = result[0].iter().next().unwrap().surface.as_str();
+        let top_surface = result[0].first().unwrap().surface.as_str();
         assert_eq!(top_surface, "箸");
 
         Ok(())
