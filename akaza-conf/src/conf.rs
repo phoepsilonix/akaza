@@ -55,6 +55,7 @@ fn connect_activate(app: &Application, config: Arc<Mutex<Config>>) -> Result<()>
     grid.attach(&notebook, 0, 0, 6, 1);
 
     let ok_button = Button::with_label("OK");
+    let window_for_ok = window.clone();
     ok_button.connect_clicked(move |_| {
         eprintln!("Save the configuration...");
         // TODO: 保存処理
@@ -106,6 +107,7 @@ fn connect_activate(app: &Application, config: Arc<Mutex<Config>>) -> Result<()>
                 dialog.show();
             }
         }
+        window_for_ok.close();
     });
     let cancel_button = Button::with_label("Cancel");
     {
