@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use anyhow::Result;
 use encoding_rs::UTF_8;
@@ -21,9 +21,11 @@ use libakaza::config::Config;
 use libakaza::dict::skk::read::read_skkdict;
 use libakaza::dict::skk::write::write_skk_dict;
 
+static APP: OnceLock<Application> = OnceLock::new();
+
 pub fn open_userdict_window(user_dict_path: &str) -> Result<()> {
     let config = Arc::new(Mutex::new(Config::load()?));
-    let app = Application::new(Some("com.github.akaza.config"), ApplicationFlags::empty());
+    let app = Application::new(Some("com.github.akaza.dict"), ApplicationFlags::empty());
 
     let user_dict_path = user_dict_path.to_string();
     app.connect_activate(move |app| {
@@ -32,6 +34,16 @@ pub fn open_userdict_window(user_dict_path: &str) -> Result<()> {
 
     let v: Vec<String> = Vec::new();
     app.run_with_args(v.as_slice());
+    Ok(())
+}
+
+pub fn open_userdict_window_in_process(user_dict_path: &str) -> Result<()> {
+    let config = Arc::new(Mutex::new(Config::load()?));
+    let app = APP
+        .get_or_init(|| Application::new(Some("com.github.akaza.dict"), ApplicationFlags::empty()))
+        .clone();
+
+    connect_activate(&app, config, user_dict_path)?;
     Ok(())
 }
 
