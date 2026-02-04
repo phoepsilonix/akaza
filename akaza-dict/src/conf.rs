@@ -6,12 +6,12 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use encoding_rs::UTF_8;
-use gtk::glib::Propagation;
-use gtk::prelude::*;
-use gtk::{Application, ApplicationWindow, Button, ListStore};
 use gtk4::gio::ApplicationFlags;
+use gtk4::glib::Propagation;
 use gtk4::glib::Type;
+use gtk4::prelude::*;
 use gtk4::MessageDialog;
+use gtk4::{Application, ApplicationWindow, Button, ListStore};
 
 use gtk4::{CellRendererText, Grid, MessageType, TreeView, TreeViewColumn};
 use log::{info, trace};
