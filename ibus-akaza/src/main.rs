@@ -1,9 +1,10 @@
 #![allow(non_upper_case_globals)]
 
 use std::ffi::{c_char, c_void, CStr};
+use std::io::Write;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
-use std::{thread, time};
+use std::{fs::OpenOptions, thread, time};
 
 use anyhow::Result;
 use clap::Parser;
@@ -105,7 +106,10 @@ fn main() -> Result<()> {
         })
         .level(arg.verbose.log_level_filter())
         .chain(std::io::stdout())
-        .chain(fern::log_file(logpath)?)
+        .chain(fern::Output::writer(
+            Box::new(FlushFile::new(logpath)?),
+            "\n",
+        ))
         .apply()?;
 
     info!("Starting ibus-akaza(rust version)");
@@ -162,4 +166,27 @@ fn main() -> Result<()> {
         warn!("Should not reach here.");
     }
     Ok(())
+}
+
+struct FlushFile {
+    file: std::fs::File,
+}
+
+impl FlushFile {
+    fn new(path: std::path::PathBuf) -> std::io::Result<Self> {
+        let file = OpenOptions::new().create(true).append(true).open(path)?;
+        Ok(Self { file })
+    }
+}
+
+impl Write for FlushFile {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let size = self.file.write(buf)?;
+        self.file.flush()?;
+        Ok(size)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.file.flush()
+    }
 }
