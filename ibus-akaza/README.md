@@ -12,5 +12,4 @@ akaza の ibus binding です。
 
 `sudo make install-debug` とすると、`../target/debug/ibus-akaza` を利用して起動するように `/usr/share/ibus/component/akaza.xml` が設定されます。
 
-この状態で `./debug.sh` すると、ibus が再起動されて、ログファイルが表示されるようになります。
-
+この状態で `./ibus-akaza-debug-session.sh` を実行すると、ibus が再起動されて、ログファイルが表示されるようになります。
