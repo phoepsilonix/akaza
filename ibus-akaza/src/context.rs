@@ -5,7 +5,7 @@ use kelp::{h2z, hira2kata, z2h, ConvOption};
 use log::{error, info, trace, warn};
 
 use akaza_conf::conf::open_configuration_window;
-use akaza_dict::conf::open_userdict_window;
+use akaza_dict::conf::open_userdict_window_in_process;
 use ibus_sys::core::{
     IBusModifierType_IBUS_CONTROL_MASK, IBusModifierType_IBUS_HYPER_MASK,
     IBusModifierType_IBUS_META_MASK, IBusModifierType_IBUS_MOD1_MASK,
@@ -97,7 +97,7 @@ impl AkazaContext {
             };
             info!("Edit the {}", dict_path);
 
-            match open_userdict_window(dict_path) {
+            match open_userdict_window_in_process(dict_path) {
                 Ok(_) => {}
                 Err(e) => error!("Err: {}", e),
             }
