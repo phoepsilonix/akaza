@@ -223,6 +223,14 @@ mod tests_right {
         assert_eq!(to_vec(yomi, got), vec!("あい", "ですね"));
     }
 
+    #[test]
+    fn test_extend_right_moves_one_char_from_next_clause() {
+        let (yomi, clauses) = mk(&["わたし", "は", "がっこう"]);
+        // 「は」にフォーカス。
+        let got = extend_right(&clauses, 1);
+        assert_eq!(to_vec(yomi, got), vec!("わたし", "はが", "っこう"));
+    }
+
     // エッジケース: 空の yomi を持つ Candidate - 現在の構成を維持する
     #[test]
     fn test_extend_right_empty_yomi_keeps_current() {
@@ -287,6 +295,14 @@ mod tests_left {
         let (yomi, clauses) = mk(&["や", "まと"]);
         let got = extend_left(&clauses, 1);
         assert_eq!(to_vec(yomi, got), vec!("やまと"));
+    }
+
+    #[test]
+    fn test_extend_left_moves_one_char_from_prev_clause() {
+        let (yomi, clauses) = mk(&["わたし", "は", "がっこう"]);
+        // 「がっこう」にフォーカス。
+        let got = extend_left(&clauses, 2);
+        assert_eq!(to_vec(yomi, got), vec!("わたし", "はがっこう"));
     }
 
     // エッジケース: 空の yomi を持つ Candidate - 現在の構成を維持する
