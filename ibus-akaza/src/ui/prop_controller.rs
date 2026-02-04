@@ -11,8 +11,8 @@ use ibus_sys::prop_list::{ibus_prop_list_append, ibus_prop_list_new, IBusPropLis
 use ibus_sys::property::{
     ibus_property_new, ibus_property_set_label, ibus_property_set_state,
     ibus_property_set_sub_props, ibus_property_set_symbol, IBusPropState_PROP_STATE_CHECKED,
-    IBusPropState_PROP_STATE_UNCHECKED, IBusPropType_PROP_TYPE_MENU, IBusPropType_PROP_TYPE_RADIO,
-    IBusProperty,
+    IBusPropState_PROP_STATE_UNCHECKED, IBusPropType_PROP_TYPE_MENU, IBusPropType_PROP_TYPE_NORMAL,
+    IBusPropType_PROP_TYPE_RADIO, IBusProperty,
 };
 use ibus_sys::text::{IBusText, StringExt};
 use libakaza::config::{Config, DictConfig, DictEncoding, DictType, DictUsage};
@@ -129,7 +129,7 @@ impl PropController {
                 .unwrap_or_else(|| dict.path.clone());
             let prop = g_object_ref_sink(ibus_property_new(
                 ("UserDict.".to_string() + dict.path.as_str() + "\0").as_ptr() as *const gchar,
-                IBusPropType_PROP_TYPE_MENU,
+                IBusPropType_PROP_TYPE_NORMAL,
                 label.to_ibus_text(),
                 c"".as_ptr() as *const gchar,
                 std::ptr::null_mut() as *mut IBusText,
