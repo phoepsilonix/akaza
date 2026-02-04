@@ -5,7 +5,7 @@ all:
 	cargo build --release -p ibus-akaza -p akaza-conf -p akaza-dict
 	$(MAKE) -C ibus-akaza all
 
-install: install-resources install-model
+install: all install-resources install-model
 	install -m 0755 target/release/ibus-akaza $(PREFIX)/bin/
 	install -m 0755 target/release/akaza-conf $(PREFIX)/bin/
 	install -m 0755 target/release/akaza-dict $(PREFIX)/bin/
