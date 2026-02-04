@@ -2,9 +2,13 @@ PREFIX ?= /usr
 DATADIR ?= $(PREFIX)/share
 
 all:
+	cargo build --release -p ibus-akaza -p akaza-conf -p akaza-dict
 	$(MAKE) -C ibus-akaza all
 
 install: install-resources install-model
+	install -m 0755 target/release/ibus-akaza $(PREFIX)/bin/
+	install -m 0755 target/release/akaza-conf $(PREFIX)/bin/
+	install -m 0755 target/release/akaza-dict $(PREFIX)/bin/
 	$(MAKE) -C ibus-akaza install
 
 install-model:
@@ -41,4 +45,3 @@ docker-test-shell:
 
 .PHONY: all install install-model install-resources clean \
 	docker-test-build docker-test docker-test-unit docker-test-integration docker-test-e2e docker-test-shell
-
