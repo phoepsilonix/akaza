@@ -15,7 +15,7 @@ use ibus_sys::property::{
     IBusProperty,
 };
 use ibus_sys::text::{IBusText, StringExt};
-use libakaza::config::{Config, DictConfig};
+use libakaza::config::{Config, DictConfig, DictEncoding, DictType, DictUsage};
 
 use crate::input_mode::{get_all_input_modes, InputMode};
 
@@ -146,15 +146,26 @@ impl PropController {
     }
 
     fn find_user_dicts(config: Config) -> anyhow::Result<Vec<DictConfig>> {
-        let dir = xdg::BaseDirectories::with_prefix("akaza")?;
-        let dir = dir.create_data_directory("userdict")?;
+        let base = xdg::BaseDirectories::with_prefix("akaza")?;
+        let userdict_dir = base.create_data_directory("userdict")?;
+        let data_dir = base.create_data_directory("")?;
+        let default_user_dict = data_dir.join("SKK-JISYO.user");
         let dicts = config
             .engine
             .dicts
             .iter()
-            .filter(|f| f.path.contains(&dir.to_string_lossy().to_string()))
+            .filter(|f| f.path.contains(&userdict_dir.to_string_lossy().to_string()))
             .cloned()
             .collect::<Vec<_>>();
+
+        if dicts.is_empty() {
+            return Ok(vec![DictConfig {
+                path: default_user_dict.to_string_lossy().to_string(),
+                encoding: DictEncoding::Utf8,
+                dict_type: DictType::SKK,
+                usage: DictUsage::Normal,
+            }]);
+        }
 
         Ok(dicts)
     }

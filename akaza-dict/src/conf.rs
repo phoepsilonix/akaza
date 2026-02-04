@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -49,6 +50,10 @@ fn connect_activate(
     let grid = Grid::builder().build();
 
     info!("Loading skk dict from {user_dict_path}");
+    if !Path::new(user_dict_path).exists() {
+        let mut fp = fs::File::create(user_dict_path)?;
+        fp.write_all(";; okuri-ari entries.\n;; okuri-nasi entries.\n".as_bytes())?;
+    }
     let dict = read_skkdict(Path::new(user_dict_path), UTF_8)?;
     let dict = dict
         .iter()
