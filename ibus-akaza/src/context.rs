@@ -91,10 +91,13 @@ impl AkazaContext {
         {
             self.input_mode_activate(engine, prop_name, prop_state);
         } else if prop_name.starts_with("UserDict.") {
-            let dict_path = prop_name.replace("UserDict.", "");
+            let Some(dict_path) = self.prop_controller.user_dict_path(&prop_name) else {
+                warn!("Unknown user dict prop_name: {}", prop_name);
+                return;
+            };
             info!("Edit the {}", dict_path);
 
-            match open_userdict_window(&dict_path) {
+            match open_userdict_window(dict_path) {
                 Ok(_) => {}
                 Err(e) => error!("Err: {}", e),
             }

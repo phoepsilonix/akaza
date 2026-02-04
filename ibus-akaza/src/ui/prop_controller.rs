@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
-use log::error;
 
 use ibus_sys::core::to_gboolean;
 use ibus_sys::engine::{ibus_engine_register_properties, ibus_engine_update_property, IBusEngine};
@@ -25,17 +24,21 @@ pub struct PropController {
     input_mode_prop: *mut IBusProperty,
     /// メニューの input mode ごとのメニュープロパティたち。
     prop_dict: HashMap<String, *mut IBusProperty>,
+    /// user dict menu items (prop_name -> path).
+    user_dict_map: HashMap<String, String>,
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl PropController {
     pub fn new(initial_input_mode: InputMode, config: Config) -> Result<Self> {
-        let (input_mode_prop, prop_list, prop_dict) = Self::init_props(initial_input_mode, config)?;
+        let (input_mode_prop, prop_list, prop_dict, user_dict_map) =
+            Self::init_props(initial_input_mode, config)?;
 
         Ok(PropController {
             prop_list,
             input_mode_prop,
             prop_dict,
+            user_dict_map,
         })
     }
 
@@ -56,6 +59,7 @@ impl PropController {
         *mut IBusProperty,
         *mut IBusPropList,
         HashMap<String, *mut IBusProperty>,
+        HashMap<String, String>,
     )> {
         unsafe {
             let prop_list =
@@ -98,16 +102,19 @@ impl PropController {
             ibus_property_set_sub_props(input_mode_prop, props);
 
             // ユーザー辞書
-            Self::build_user_dict(prop_list, config)?;
+            let user_dict_map = Self::build_user_dict(prop_list, config)?;
 
             // 設定ファイルを開くというやつ
             Self::build_preference_menu(prop_list);
 
-            Ok((input_mode_prop, prop_list, prop_map))
+            Ok((input_mode_prop, prop_list, prop_map, user_dict_map))
         }
     }
 
-    unsafe fn build_user_dict(prop_list: *mut IBusPropList, config: Config) -> Result<()> {
+    unsafe fn build_user_dict(
+        prop_list: *mut IBusPropList,
+        config: Config,
+    ) -> Result<HashMap<String, String>> {
         let user_dict_prop = g_object_ref_sink(ibus_property_new(
             c"UserDict".as_ptr() as *const gchar,
             IBusPropType_PROP_TYPE_MENU,
@@ -122,13 +129,15 @@ impl PropController {
         ibus_prop_list_append(prop_list, user_dict_prop);
 
         let props = g_object_ref_sink(ibus_prop_list_new() as gpointer) as *mut IBusPropList;
-        for dict in Self::find_user_dicts(config)? {
+        let mut user_dict_map = HashMap::new();
+        for (idx, dict) in Self::find_user_dicts(config)?.into_iter().enumerate() {
             let label = Path::new(&dict.path)
                 .file_name()
                 .map(|name| name.to_string_lossy().to_string())
                 .unwrap_or_else(|| dict.path.clone());
+            let prop_name = format!("UserDict.{idx}");
             let prop = g_object_ref_sink(ibus_property_new(
-                ("UserDict.".to_string() + dict.path.as_str() + "\0").as_ptr() as *const gchar,
+                (prop_name.clone() + "\0").as_ptr() as *const gchar,
                 IBusPropType_PROP_TYPE_NORMAL,
                 label.to_ibus_text(),
                 c"".as_ptr() as *const gchar,
@@ -138,11 +147,11 @@ impl PropController {
                 IBusPropState_PROP_STATE_UNCHECKED,
                 std::ptr::null_mut(),
             ) as gpointer) as *mut IBusProperty;
-            // prop_map.insert(input_mode.prop_name.to_string(), prop);
             ibus_prop_list_append(props, prop);
+            user_dict_map.insert(prop_name, dict.path);
         }
         ibus_property_set_sub_props(user_dict_prop, props);
-        Ok(())
+        Ok(user_dict_map)
     }
 
     fn find_user_dicts(config: Config) -> anyhow::Result<Vec<DictConfig>> {
@@ -197,14 +206,21 @@ impl PropController {
             ibus_engine_update_property(engine, self.input_mode_prop);
         }
 
-        // 有効化する input mode のメニュー項目にチェックを入れる。
-        let Some(property) = self.prop_dict.get(input_mode.prop_name) else {
-            error!("Unknown input mode: {input_mode:?}");
-            return;
-        };
-        unsafe {
-            ibus_property_set_state(*property, IBusPropState_PROP_STATE_CHECKED);
-            ibus_engine_update_property(engine, *property);
+        // 有効化する input mode だけをチェックし、他は外す。
+        for (prop_name, property) in &self.prop_dict {
+            let state = if prop_name == input_mode.prop_name {
+                IBusPropState_PROP_STATE_CHECKED
+            } else {
+                IBusPropState_PROP_STATE_UNCHECKED
+            };
+            unsafe {
+                ibus_property_set_state(*property, state);
+                ibus_engine_update_property(engine, *property);
+            }
         }
+    }
+
+    pub fn user_dict_path(&self, prop_name: &str) -> Option<&String> {
+        self.user_dict_map.get(prop_name)
     }
 }
