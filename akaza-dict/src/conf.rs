@@ -1,4 +1,3 @@
-use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::fs;
 use std::io::Write;
@@ -10,7 +9,6 @@ use encoding_rs::UTF_8;
 use gtk::glib::Propagation;
 use gtk::prelude::*;
 use gtk::{Application, ApplicationWindow, Button, ListStore};
-use gtk4 as gtk;
 use gtk4::gio::ApplicationFlags;
 use gtk4::glib::Type;
 use gtk4::MessageDialog;
@@ -21,11 +19,6 @@ use log::{info, trace};
 use libakaza::config::Config;
 use libakaza::dict::skk::read::read_skkdict;
 use libakaza::dict::skk::write::write_skk_dict;
-
-thread_local! {
-    static APP: RefCell<Option<Application>> = RefCell::new(None);
-    static GTK_INITIALIZED: Cell<bool> = Cell::new(false);
-}
 
 pub fn open_userdict_window(user_dict_path: &str) -> Result<()> {
     let config = Arc::new(Mutex::new(Config::load()?));
@@ -39,29 +32,6 @@ pub fn open_userdict_window(user_dict_path: &str) -> Result<()> {
     let v: Vec<String> = Vec::new();
     app.run_with_args(v.as_slice());
     Ok(())
-}
-
-pub fn open_userdict_window_in_process(user_dict_path: &str) -> Result<()> {
-    let config = Arc::new(Mutex::new(Config::load()?));
-    APP.with(|cell| {
-        let mut app = cell.borrow_mut();
-        let app = app.get_or_insert_with(|| {
-            Application::new(Some("com.github.akaza.dict"), ApplicationFlags::empty())
-        });
-        ensure_gtk_initialized()?;
-        connect_activate(app, config, user_dict_path)
-    })?;
-    Ok(())
-}
-
-fn ensure_gtk_initialized() -> Result<()> {
-    GTK_INITIALIZED.with(|initialized| {
-        if !initialized.get() {
-            gtk::init()?;
-            initialized.set(true);
-        }
-        Ok(())
-    })
 }
 
 fn connect_activate(
