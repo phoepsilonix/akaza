@@ -8,6 +8,7 @@ use gtk::{Application, ApplicationWindow, Button, Label, Notebook};
 use gtk4 as gtk;
 use gtk4::gio::ApplicationFlags;
 use gtk4::Grid;
+use gtk4::{MessageDialog, MessageType};
 use log::{error, info};
 
 use libakaza::config::{Config, EngineConfig};
@@ -70,23 +71,40 @@ fn connect_activate(app: &Application, config: Arc<Mutex<Config>>) -> Result<()>
         };
         info!("Saving config: {}", serde_yaml::to_string(&config).unwrap());
 
-        config.save().unwrap();
+        if let Err(err) = config.save() {
+            error!("Failed to save config: {}", err);
+            let dialog = MessageDialog::builder()
+                .message_type(MessageType::Error)
+                .text(format!("Error: {err}"))
+                .build();
+            dialog.show();
+            return;
+        }
 
         // 最後に ibus restart をしちゃおう。設定の再読み込みとか実装するのは大変。
-        let output = Command::new("ibus").arg("restart").output().unwrap();
-
-        if !output.status.success() {
-            error!(
-                "Cannot run `ibus restart`: out={}, err={}",
-                String::from_utf8(output.stdout).unwrap(),
-                String::from_utf8(output.stderr).unwrap()
-            );
-        } else {
-            info!(
-                "Ran `ibus restart`: out={}, err={}",
-                String::from_utf8(output.stdout).unwrap(),
-                String::from_utf8(output.stderr).unwrap()
-            );
+        match Command::new("ibus").arg("restart").output() {
+            Ok(output) => {
+                let out = String::from_utf8_lossy(&output.stdout);
+                let err = String::from_utf8_lossy(&output.stderr);
+                if !output.status.success() {
+                    error!("Cannot run `ibus restart`: out={}, err={}", out, err);
+                    let dialog = MessageDialog::builder()
+                        .message_type(MessageType::Error)
+                        .text(format!("ibus restart failed: {err}"))
+                        .build();
+                    dialog.show();
+                } else {
+                    info!("Ran `ibus restart`: out={}, err={}", out, err);
+                }
+            }
+            Err(err) => {
+                error!("Failed to execute `ibus restart`: {}", err);
+                let dialog = MessageDialog::builder()
+                    .message_type(MessageType::Error)
+                    .text(format!("Failed to execute `ibus restart`: {err}"))
+                    .build();
+                dialog.show();
+            }
         }
     });
     let cancel_button = Button::with_label("Cancel");
