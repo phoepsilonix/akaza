@@ -95,7 +95,10 @@ impl Config {
     pub fn save(&self) -> Result<()> {
         let file_name = Self::file_name()?;
         let yml = serde_yaml::to_string(self)?;
-        info!("Write to file: {}", file_name.to_str().unwrap());
+        if let Some(parent) = file_name.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        info!("Write to file: {}", file_name.display());
         let mut fp = File::create(file_name)?;
         fp.write_all(yml.as_bytes())?;
         Ok(())
