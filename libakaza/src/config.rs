@@ -11,7 +11,7 @@ use std::fs::File;
 use std::io::{BufReader, Write};
 use std::path::PathBuf;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 
@@ -95,9 +95,15 @@ impl Config {
     pub fn save(&self) -> Result<()> {
         let file_name = Self::file_name()?;
         let yml = serde_yaml::to_string(self)?;
-        info!("Write to file: {}", file_name.to_str().unwrap());
-        let mut fp = File::create(file_name)?;
-        fp.write_all(yml.as_bytes())?;
+        if let Some(parent) = file_name.parent() {
+            std::fs::create_dir_all(parent)
+                .with_context(|| format!("Cannot create config dir: {}", parent.display()))?;
+        }
+        info!("Write to file: {}", file_name.display());
+        let mut fp = File::create(&file_name)
+            .with_context(|| format!("Cannot open config file: {}", file_name.display()))?;
+        fp.write_all(yml.as_bytes())
+            .with_context(|| format!("Cannot write config file: {}", file_name.display()))?;
         Ok(())
     }
 
