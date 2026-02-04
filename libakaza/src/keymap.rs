@@ -4,7 +4,7 @@ use std::io::BufReader;
 
 use crate::resource::detect_resource_path;
 use anyhow::{bail, Context, Result};
-use log::info;
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
@@ -113,12 +113,18 @@ impl Keymap {
 
             Ok(map)
         } else {
-            let got = got
-                .to_map()?
-                .iter()
-                .map(|(a, b)| (a.clone(), b.clone().unwrap()))
-                .collect::<HashMap<KeyPattern, String>>();
-            Ok(got)
+            let mut map = HashMap::new();
+            for (pattern, command) in got.to_map()? {
+                let Some(command) = command else {
+                    warn!(
+                        "Ignored null command in keymap without extends: {:?}",
+                        pattern
+                    );
+                    continue;
+                };
+                map.insert(pattern, command);
+            }
+            Ok(map)
         }
     }
 }

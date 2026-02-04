@@ -1,5 +1,21 @@
 # Changelog
 
+## [v0.2.2](https://github.com/akaza-im/akaza/compare/v0.2.1...v0.2.2) - 2026-02-03
+- Migrate from marisa-sys to rsmarisa by @tokuhirom in https://github.com/akaza-im/akaza/pull/343
+- Remove marisa-sys directory by @tokuhirom in https://github.com/akaza-im/akaza/pull/345
+- Add comprehensive test coverage for conversion engine by @tokuhirom in https://github.com/akaza-im/akaza/pull/346
+- Add CLAUDE.md with development guidelines by @tokuhirom in https://github.com/akaza-im/akaza/pull/347
+- Fix crash risk with invalid keyval in ibus-akaza by @tokuhirom in https://github.com/akaza-im/akaza/pull/349
+- Fix crash risk in extend_clause with empty yomi by @tokuhirom in https://github.com/akaza-im/akaza/pull/348
+- Fix panic in build_string with out-of-bounds node_selected by @tokuhirom in https://github.com/akaza-im/akaza/pull/350
+- CLAUDE.md の更新: PR 言語ポリシーとテストガイドラインの追加 by @tokuhirom in https://github.com/akaza-im/akaza/pull/352
+- Phase 1: Convert ibus-akaza to lib+bin structure for testing by @tokuhirom in https://github.com/akaza-im/akaza/pull/356
+- make install-model ターゲットを追加し、make install に統合 by @tokuhirom in https://github.com/akaza-im/akaza/pull/357
+- gnome-terminal で日本語入力時にクラッシュする問題を修正 by @tokuhirom in https://github.com/akaza-im/akaza/pull/358
+- Fix crash risks in graph_resolver with proper error handling by @tokuhirom in https://github.com/akaza-im/akaza/pull/351
+- プリエディット属性の範囲指定ミスによる gnome-terminal クラッシュを修正 by @tokuhirom in https://github.com/akaza-im/akaza/pull/360
+- ibus-akaza の unwrap/panic を穏当なエラーハンドリングに置換 by @tokuhirom in https://github.com/akaza-im/akaza/pull/359
+
 ## [v0.2.1](https://github.com/akaza-im/akaza/compare/v0.2.0...v0.2.1) - 2026-01-27
 - fix off by one for lookup table selection. by @tokuhirom in https://github.com/akaza-im/akaza/pull/257
 - Refactor _update_lookup_table by @tokuhirom in https://github.com/akaza-im/akaza/pull/261

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use anyhow::{bail, Result};
 use half::f16;
-use log::info;
+use log::{info, warn};
 
 use rsmarisa::{Agent, Keyset, Trie};
 
@@ -142,9 +142,14 @@ impl SystemBigramLM for MarisaSystemBigramLM {
 
         if self.trie.predictive_search(&mut agent) {
             let keyword = agent.key().as_bytes();
-            let last2: [u8; 2] = keyword[keyword.len() - 2..keyword.len()]
-                .try_into()
-                .unwrap();
+            if keyword.len() < 2 {
+                warn!("Malformed bigram entry: len={}", keyword.len());
+                return None;
+            }
+            let last2: [u8; 2] = match keyword[keyword.len() - 2..keyword.len()].try_into() {
+                Ok(bytes) => bytes,
+                Err(_) => return None,
+            };
             let score: f16 = f16::from_le_bytes(last2);
             return Some(score.to_f32());
         }
