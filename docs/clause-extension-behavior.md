@@ -61,3 +61,20 @@
 - 伸縮によって **隣接文節が消滅**する場合は、文節数が減る。
 - サロゲートやマルチバイト文字は **1文字単位**で扱う。
 - 変換候補が空の場合は **現状維持**とする。
+
+## force_selected_clause
+
+変換エンジンに「強制的な分節境界」を渡すための内部状態。
+Shift+矢印による文節伸縮の結果は、`force_selected_clause` に保持され、
+次回の変換に反映される。
+
+- **格納内容**: 文字列内の範囲（Range<usize>）の配列。各範囲は1文節を表す。
+- **更新タイミング**: Shift+→ / Shift+← の操作時。
+- **消去タイミング**:
+  - 生入力が変わったとき（`on_raw_input_change` 内）
+  - 明示的にクリアしたとき（`clear_force_selected_clause`）
+- **適用タイミング**:
+  - `engine.convert(..., Some(&force_selected_clause))` で再変換に使用。
+- **文節選択への影響**:
+  - `force_selected_clause` がある場合、再変換しても
+    `current_clause` は維持される（`set_clauses` 内の条件分岐）。
