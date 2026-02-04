@@ -97,6 +97,8 @@ impl AkazaContext {
             };
             info!("Edit the {}", dict_path);
 
+            // akaza-dict は別プロセスで起動し、辞書GUIの不具合が IME 本体のクラッシュに
+            // 波及しないようにする（プロセス分離）。
             match open_userdict_window(dict_path) {
                 Ok(_) => {}
                 Err(e) => error!("Err: {}", e),
