@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use anyhow::Result;
-use log::error;
 
 use ibus_sys::core::to_gboolean;
 use ibus_sys::engine::{ibus_engine_register_properties, ibus_engine_update_property, IBusEngine};
