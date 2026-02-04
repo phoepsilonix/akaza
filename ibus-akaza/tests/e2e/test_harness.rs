@@ -21,7 +21,7 @@ impl IBusTestHarness {
 
         // 1. ibus-daemon を起動
         let ibus_daemon = Command::new("ibus-daemon")
-            .args(&["--xim", "--daemonize", "--replace"])
+            .args(["--xim", "--daemonize", "--replace"])
             .spawn()
             .context("Failed to start ibus-daemon")?;
 
@@ -37,7 +37,7 @@ impl IBusTestHarness {
 
         // 3. akaza エンジンを有効化
         let status = Command::new("ibus")
-            .args(&["engine", "akaza"])
+            .args(["engine", "akaza"])
             .status()
             .context("Failed to activate akaza engine")?;
 
@@ -75,7 +75,7 @@ impl Drop for IBusTestHarness {
 /// xdotool を使用してキーを送信
 pub fn send_keys(text: &str) -> Result<()> {
     Command::new("xdotool")
-        .args(&["type", "--delay", "50", text])
+        .args(["type", "--delay", "50", text])
         .status()
         .context("Failed to send keys with xdotool")?;
     Ok(())
@@ -84,7 +84,7 @@ pub fn send_keys(text: &str) -> Result<()> {
 /// xdotool を使用して特殊キーを送信
 pub fn send_key(key_name: &str) -> Result<()> {
     Command::new("xdotool")
-        .args(&["key", key_name])
+        .args(["key", key_name])
         .status()
         .context(format!("Failed to send key: {}", key_name))?;
     Ok(())
@@ -93,7 +93,7 @@ pub fn send_key(key_name: &str) -> Result<()> {
 /// テスト用のアプリケーションウィンドウを開く
 pub fn open_test_window() -> Result<Child> {
     let process = Command::new("xterm")
-        .args(&["-e", "cat"])
+        .args(["-e", "cat"])
         .spawn()
         .context("Failed to open xterm")?;
 
