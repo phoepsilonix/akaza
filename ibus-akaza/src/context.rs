@@ -99,9 +99,14 @@ impl AkazaContext {
 
             // akaza-dict は別プロセスで起動し、辞書GUIの不具合が IME 本体のクラッシュに
             // 波及しないようにする（プロセス分離）。
+            info!("Launching akaza-dict process...");
             match open_userdict_window(dict_path) {
-                Ok(_) => {}
-                Err(e) => error!("Err: {}", e),
+                Ok(_) => {
+                    info!("akaza-dict launch request succeeded.");
+                }
+                Err(e) => {
+                    error!("akaza-dict launch failed: {}", e);
+                }
             }
         }
     }
