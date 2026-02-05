@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use encoding_rs::UTF_8;
-use gtk::glib::Propagation;
-use gtk::prelude::*;
-use gtk::{Application, ApplicationWindow, Button, ListStore};
-use gtk4 as gtk;
 use gtk4::gio::ApplicationFlags;
+use gtk4::glib::Propagation;
 use gtk4::glib::Type;
+use gtk4::prelude::*;
 use gtk4::MessageDialog;
+use gtk4::{Application, ApplicationWindow, Button, ListStore};
 
 use gtk4::{CellRendererText, Grid, MessageType, TreeView, TreeViewColumn};
 use log::{info, trace};
@@ -22,7 +22,7 @@ use libakaza::dict::skk::write::write_skk_dict;
 
 pub fn open_userdict_window(user_dict_path: &str) -> Result<()> {
     let config = Arc::new(Mutex::new(Config::load()?));
-    let app = Application::new(Some("com.github.akaza.config"), ApplicationFlags::empty());
+    let app = Application::new(Some("com.github.akaza.dict"), ApplicationFlags::empty());
 
     let user_dict_path = user_dict_path.to_string();
     app.connect_activate(move |app| {
@@ -49,6 +49,10 @@ fn connect_activate(
     let grid = Grid::builder().build();
 
     info!("Loading skk dict from {user_dict_path}");
+    if !Path::new(user_dict_path).exists() {
+        let mut fp = fs::File::create(user_dict_path)?;
+        fp.write_all(";; okuri-ari entries.\n;; okuri-nasi entries.\n".as_bytes())?;
+    }
     let dict = read_skkdict(Path::new(user_dict_path), UTF_8)?;
     let dict = dict
         .iter()

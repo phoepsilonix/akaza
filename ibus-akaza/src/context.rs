@@ -1,11 +1,11 @@
 use std::collections::HashMap;
+use std::process::Command;
 
 use anyhow::Result;
 use kelp::{h2z, hira2kata, z2h, ConvOption};
 use log::{error, info, trace, warn};
 
 use akaza_conf::conf::open_configuration_window;
-use akaza_dict::conf::open_userdict_window;
 use ibus_sys::core::{
     IBusModifierType_IBUS_CONTROL_MASK, IBusModifierType_IBUS_HYPER_MASK,
     IBusModifierType_IBUS_META_MASK, IBusModifierType_IBUS_MOD1_MASK,
@@ -91,12 +91,23 @@ impl AkazaContext {
         {
             self.input_mode_activate(engine, prop_name, prop_state);
         } else if prop_name.starts_with("UserDict.") {
-            let dict_path = prop_name.replace("UserDict.", "");
+            info!("Starting UserDict. operation");
+            let Some(dict_path) = self.prop_controller.user_dict_path(&prop_name) else {
+                warn!("Unknown user dict prop_name: {}", prop_name);
+                return;
+            };
             info!("Edit the {}", dict_path);
 
-            match open_userdict_window(&dict_path) {
-                Ok(_) => {}
-                Err(e) => error!("Err: {}", e),
+            // akaza-dict は別プロセスで起動し、辞書GUIの不具合が IME 本体のクラッシュに
+            // 波及しないようにする（プロセス分離）。
+            info!("Launching akaza-dict process...");
+            match Command::new("akaza-dict").arg(dict_path).spawn() {
+                Ok(child) => {
+                    info!("akaza-dict process spawned: pid={}", child.id());
+                }
+                Err(e) => {
+                    error!("akaza-dict launch failed: {}", e);
+                }
             }
         }
     }
