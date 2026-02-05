@@ -1,5 +1,22 @@
 # Changelog
 
+## [v0.2.3](https://github.com/akaza-im/akaza/compare/v0.2.2...v0.2.3) - 2026-02-05
+- Guard crash risks and stabilize cache tests by @tokuhirom in https://github.com/akaza-im/akaza/pull/361
+- AGENTS.md に cargo fmt 実行の注意を追記 by @tokuhirom in https://github.com/akaza-im/akaza/pull/362
+- akaza-dict の引数不足クラッシュを回避 by @tokuhirom in https://github.com/akaza-im/akaza/pull/364
+- make install で akaza-conf/akaza-dict もインストール by @tokuhirom in https://github.com/akaza-im/akaza/pull/365
+- 設定保存時にconfigディレクトリを作成 by @tokuhirom in https://github.com/akaza-im/akaza/pull/366
+- cargo-deny-action をCIで利用 by @tokuhirom in https://github.com/akaza-im/akaza/pull/367
+- akaza-conf のOK後にウィンドウを閉じる by @tokuhirom in https://github.com/akaza-im/akaza/pull/368
+- Shift+矢印で文節フォーカスを維持 by @tokuhirom in https://github.com/akaza-im/akaza/pull/369
+- 入力モードメニューのチェック状態を同期 by @tokuhirom in https://github.com/akaza-im/akaza/pull/371
+- README に ibus restart の記載を追加 by @tokuhirom in https://github.com/akaza-im/akaza/pull/370
+- Clippy 警告の解消 by @tokuhirom in https://github.com/akaza-im/akaza/pull/373
+- デバッグ用スクリプト名を整理 by @tokuhirom in https://github.com/akaza-im/akaza/pull/375
+- ユーザー辞書メニューの初期表示と作成 by @tokuhirom in https://github.com/akaza-im/akaza/pull/372
+- 設定メニューが動作しない問題を修正 by @tokuhirom in https://github.com/akaza-im/akaza/pull/376
+- preedit テキストが黒背景に黒文字で見えない問題を修正 by @tokuhirom in https://github.com/akaza-im/akaza/pull/377
+
 ## [v0.2.2](https://github.com/akaza-im/akaza/compare/v0.2.1...v0.2.2) - 2026-02-03
 - Migrate from marisa-sys to rsmarisa by @tokuhirom in https://github.com/akaza-im/akaza/pull/343
 - Remove marisa-sys directory by @tokuhirom in https://github.com/akaza-im/akaza/pull/345
