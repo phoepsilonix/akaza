@@ -181,7 +181,7 @@ impl PropController {
     unsafe fn build_preference_menu(prop_list: *mut IBusPropList) {
         let preference_prop = g_object_ref_sink(ibus_property_new(
             c"PrefPane".as_ptr() as *const gchar,
-            IBusPropType_PROP_TYPE_MENU,
+            IBusPropType_PROP_TYPE_NORMAL,
             "設定".to_ibus_text(),
             c"".as_ptr() as *const gchar,
             "Preference".to_ibus_text(),
