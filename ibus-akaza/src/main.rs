@@ -53,14 +53,15 @@ unsafe extern "C" fn property_activate(
     prop_name: *mut gchar,
     prop_state: guint,
 ) {
-    let context_ref = &mut *(context as *mut AkazaContext);
-    context_ref.do_property_activate(
-        engine,
-        CStr::from_ptr(prop_name as *mut c_char)
-            .to_string_lossy()
-            .to_string(),
-        prop_state,
+    let prop_name_str = CStr::from_ptr(prop_name as *mut c_char)
+        .to_string_lossy()
+        .to_string();
+    info!(
+        "property_activate callback fired: prop_name={:?}, prop_state={}",
+        prop_name_str, prop_state
     );
+    let context_ref = &mut *(context as *mut AkazaContext);
+    context_ref.do_property_activate(engine, prop_name_str, prop_state);
 }
 
 fn load_user_data() -> Arc<Mutex<UserData>> {

@@ -935,8 +935,6 @@ dependencies = [
 name = "ibus-akaza"
 version = "0.1.7"
 dependencies = [
- "akaza-conf",
- "akaza-dict",
  "anyhow",
  "cc",
  "chrono",

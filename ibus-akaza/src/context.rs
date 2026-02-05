@@ -5,7 +5,6 @@ use anyhow::Result;
 use kelp::{h2z, hira2kata, z2h, ConvOption};
 use log::{error, info, trace, warn};
 
-use akaza_conf::conf::open_configuration_window;
 use ibus_sys::core::{
     IBusModifierType_IBUS_CONTROL_MASK, IBusModifierType_IBUS_HYPER_MASK,
     IBusModifierType_IBUS_META_MASK, IBusModifierType_IBUS_MOD1_MASK,
@@ -82,9 +81,29 @@ impl AkazaContext {
     ) {
         info!("do_property_activate: {}, {}", prop_name, prop_state);
         if prop_name == "PrefPane" {
-            match open_configuration_window() {
-                Ok(_) => {}
-                Err(e) => info!("Err: {}", e),
+            info!("PrefPane matched. Attempting to launch akaza-conf...");
+            let which_result = Command::new("which").arg("akaza-conf").output();
+            match &which_result {
+                Ok(output) => {
+                    info!(
+                        "which akaza-conf: status={}, stdout={}, stderr={}",
+                        output.status,
+                        String::from_utf8_lossy(&output.stdout).trim(),
+                        String::from_utf8_lossy(&output.stderr).trim()
+                    );
+                }
+                Err(e) => {
+                    warn!("which akaza-conf failed: {}", e);
+                }
+            }
+            info!("Launching akaza-conf process...");
+            match Command::new("akaza-conf").spawn() {
+                Ok(child) => {
+                    info!("akaza-conf process spawned: pid={}", child.id());
+                }
+                Err(e) => {
+                    error!("akaza-conf launch failed: {}", e);
+                }
             }
         } else if prop_state == IBusPropState_PROP_STATE_CHECKED
             && prop_name.starts_with("InputMode.")
