@@ -7,7 +7,8 @@ use log::{error, info};
 use ibus_sys::attr_list::{ibus_attr_list_append, ibus_attr_list_new};
 use ibus_sys::attribute::{
     ibus_attribute_new, IBusAttrType_IBUS_ATTR_TYPE_BACKGROUND,
-    IBusAttrType_IBUS_ATTR_TYPE_UNDERLINE, IBusAttrUnderline_IBUS_ATTR_UNDERLINE_SINGLE,
+    IBusAttrType_IBUS_ATTR_TYPE_FOREGROUND, IBusAttrType_IBUS_ATTR_TYPE_UNDERLINE,
+    IBusAttrUnderline_IBUS_ATTR_UNDERLINE_SINGLE,
 };
 use ibus_sys::core::to_gboolean;
 use ibus_sys::engine::{
@@ -426,6 +427,16 @@ impl CurrentState {
                 ibus_attribute_new(
                     IBusAttrType_IBUS_ATTR_TYPE_BACKGROUND,
                     0x00333333,
+                    bgstart,
+                    preedit_char_len,
+                ),
+            );
+            // 背景色が濃いため、前景色を白にして視認性を確保する。
+            ibus_attr_list_append(
+                preedit_attrs,
+                ibus_attribute_new(
+                    IBusAttrType_IBUS_ATTR_TYPE_FOREGROUND,
+                    0x00FFFFFF,
                     bgstart,
                     preedit_char_len,
                 ),
