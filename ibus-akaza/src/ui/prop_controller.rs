@@ -10,11 +10,11 @@ use ibus_sys::prop_list::{ibus_prop_list_append, ibus_prop_list_new, IBusPropLis
 use ibus_sys::property::{
     ibus_property_new, ibus_property_set_label, ibus_property_set_state,
     ibus_property_set_sub_props, ibus_property_set_symbol, IBusPropState_PROP_STATE_CHECKED,
-    IBusPropState_PROP_STATE_UNCHECKED, IBusPropType_PROP_TYPE_MENU, IBusPropType_PROP_TYPE_RADIO,
-    IBusProperty,
+    IBusPropState_PROP_STATE_UNCHECKED, IBusPropType_PROP_TYPE_MENU, IBusPropType_PROP_TYPE_NORMAL,
+    IBusPropType_PROP_TYPE_RADIO, IBusProperty,
 };
 use ibus_sys::text::{IBusText, StringExt};
-use libakaza::config::{Config, DictConfig};
+use libakaza::config::{Config, DictConfig, DictEncoding, DictType, DictUsage};
 
 use crate::input_mode::{get_all_input_modes, InputMode};
 
@@ -22,6 +22,7 @@ type InitPropsResult = (
     *mut IBusProperty,
     *mut IBusPropList,
     HashMap<String, *mut IBusProperty>,
+    HashMap<String, String>,
 );
 
 pub struct PropController {
@@ -30,17 +31,21 @@ pub struct PropController {
     input_mode_prop: *mut IBusProperty,
     /// メニューの input mode ごとのメニュープロパティたち。
     prop_dict: HashMap<String, *mut IBusProperty>,
+    /// user dict menu items (prop_name -> path).
+    user_dict_map: HashMap<String, String>,
 }
 
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 impl PropController {
     pub fn new(initial_input_mode: InputMode, config: Config) -> Result<Self> {
-        let (input_mode_prop, prop_list, prop_dict) = Self::init_props(initial_input_mode, config)?;
+        let (input_mode_prop, prop_list, prop_dict, user_dict_map) =
+            Self::init_props(initial_input_mode, config)?;
 
         Ok(PropController {
             prop_list,
             input_mode_prop,
             prop_dict,
+            user_dict_map,
         })
     }
 
@@ -96,16 +101,19 @@ impl PropController {
             ibus_property_set_sub_props(input_mode_prop, props);
 
             // ユーザー辞書
-            Self::build_user_dict(prop_list, config)?;
+            let user_dict_map = Self::build_user_dict(prop_list, config)?;
 
             // 設定ファイルを開くというやつ
             Self::build_preference_menu(prop_list);
 
-            Ok((input_mode_prop, prop_list, prop_map))
+            Ok((input_mode_prop, prop_list, prop_map, user_dict_map))
         }
     }
 
-    unsafe fn build_user_dict(prop_list: *mut IBusPropList, config: Config) -> Result<()> {
+    unsafe fn build_user_dict(
+        prop_list: *mut IBusPropList,
+        config: Config,
+    ) -> Result<HashMap<String, String>> {
         let user_dict_prop = g_object_ref_sink(ibus_property_new(
             c"UserDict".as_ptr() as *const gchar,
             IBusPropType_PROP_TYPE_MENU,
@@ -120,14 +128,16 @@ impl PropController {
         ibus_prop_list_append(prop_list, user_dict_prop);
 
         let props = g_object_ref_sink(ibus_prop_list_new() as gpointer) as *mut IBusPropList;
-        for dict in Self::find_user_dicts(config)? {
+        let mut user_dict_map = HashMap::new();
+        for (idx, dict) in Self::find_user_dicts(config)?.into_iter().enumerate() {
             let label = Path::new(&dict.path)
                 .file_name()
                 .map(|name| name.to_string_lossy().to_string())
                 .unwrap_or_else(|| dict.path.clone());
+            let prop_name = format!("UserDict.{idx}");
             let prop = g_object_ref_sink(ibus_property_new(
-                ("UserDict.".to_string() + dict.path.as_str() + "\0").as_ptr() as *const gchar,
-                IBusPropType_PROP_TYPE_MENU,
+                (prop_name.clone() + "\0").as_ptr() as *const gchar,
+                IBusPropType_PROP_TYPE_NORMAL,
                 label.to_ibus_text(),
                 c"".as_ptr() as *const gchar,
                 std::ptr::null_mut() as *mut IBusText,
@@ -136,23 +146,34 @@ impl PropController {
                 IBusPropState_PROP_STATE_UNCHECKED,
                 std::ptr::null_mut(),
             ) as gpointer) as *mut IBusProperty;
-            // prop_map.insert(input_mode.prop_name.to_string(), prop);
             ibus_prop_list_append(props, prop);
+            user_dict_map.insert(prop_name, dict.path);
         }
         ibus_property_set_sub_props(user_dict_prop, props);
-        Ok(())
+        Ok(user_dict_map)
     }
 
     fn find_user_dicts(config: Config) -> anyhow::Result<Vec<DictConfig>> {
-        let dir = xdg::BaseDirectories::with_prefix("akaza")?;
-        let dir = dir.create_data_directory("userdict")?;
+        let base = xdg::BaseDirectories::with_prefix("akaza")?;
+        let userdict_dir = base.create_data_directory("userdict")?;
+        let data_dir = base.create_data_directory("")?;
+        let default_user_dict = data_dir.join("SKK-JISYO.user");
         let dicts = config
             .engine
             .dicts
             .iter()
-            .filter(|f| f.path.contains(&dir.to_string_lossy().to_string()))
+            .filter(|f| f.path.contains(&userdict_dir.to_string_lossy().to_string()))
             .cloned()
             .collect::<Vec<_>>();
+
+        if dicts.is_empty() {
+            return Ok(vec![DictConfig {
+                path: default_user_dict.to_string_lossy().to_string(),
+                encoding: DictEncoding::Utf8,
+                dict_type: DictType::SKK,
+                usage: DictUsage::Normal,
+            }]);
+        }
 
         Ok(dicts)
     }
@@ -196,5 +217,9 @@ impl PropController {
                 ibus_engine_update_property(engine, *property);
             }
         }
+    }
+
+    pub fn user_dict_path(&self, prop_name: &str) -> Option<&String> {
+        self.user_dict_map.get(prop_name)
     }
 }
