@@ -13,11 +13,15 @@ cargo build --package akaza-data --release
 ### check - かな漢字変換を実行する
 
 ひらがな文字列をかな漢字変換して結果を表示します。
+引数を省略すると stdin から行ごとに読み取ります（エンジンを1回だけ構築して複数行を処理できます）。
 
 ```bash
 # 基本的な使い方（設定ファイルのデフォルト設定を使用）
 akaza-data check きょうはいいてんきですね
 # => 今日/は/いい/天気/です/ね
+
+# stdin から複数行を処理
+echo -e "きょうはいいてんきですね\nわたしはにほんごがすきです" | akaza-data check
 
 # JSON 出力
 akaza-data check --format json きょうはいいてんきですね

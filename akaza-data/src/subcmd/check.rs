@@ -1,13 +1,17 @@
 use std::fs::File;
-use std::io::Write;
+use std::io::{self, BufRead, Write};
 use std::sync::{Arc, Mutex};
 
 use log::{error, info};
 use serde::Serialize;
 
 use libakaza::config::{Config, DictConfig, DictEncoding, DictType, DictUsage};
-use libakaza::engine::bigram_word_viterbi_engine::BigramWordViterbiEngineBuilder;
+use libakaza::engine::bigram_word_viterbi_engine::{
+    BigramWordViterbiEngine, BigramWordViterbiEngineBuilder,
+};
 use libakaza::graph::candidate::Candidate;
+use libakaza::kana_kanji::base::KanaKanjiDict;
+use libakaza::lm::base::{SystemBigramLM, SystemUnigramLM};
 use libakaza::user_side_data::user_data::UserData;
 
 #[derive(Debug, Serialize)]
@@ -31,7 +35,7 @@ struct CandidateOutput {
 }
 
 pub struct CheckOptions<'a> {
-    pub yomi: &'a str,
+    pub yomi: Option<String>,
     pub expected: Option<String>,
     pub use_user_data: bool,
     pub eucjp_dict: &'a [String],
@@ -89,10 +93,45 @@ pub fn check(opts: CheckOptions) -> anyhow::Result<()> {
     }
 
     let engine = builder.build()?;
-    let lattice = engine.to_lattice(opts.yomi, None)?;
+
+    match opts.yomi {
+        Some(yomi) => {
+            // 引数指定モード: 従来通り1行処理
+            check_one_line(
+                &engine,
+                &yomi,
+                opts.expected,
+                opts.json_output,
+                opts.num_candidates,
+            )?;
+        }
+        None => {
+            // stdin モード: 行ごとに処理
+            let stdin = io::stdin();
+            for line in stdin.lock().lines() {
+                let line = line?;
+                if line.is_empty() {
+                    continue;
+                }
+                check_one_line(&engine, &line, None, opts.json_output, opts.num_candidates)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn check_one_line<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict>(
+    engine: &BigramWordViterbiEngine<U, B, KD>,
+    yomi: &str,
+    expected: Option<String>,
+    json_output: bool,
+    num_candidates: usize,
+) -> anyhow::Result<()> {
+    let lattice = engine.to_lattice(yomi, None)?;
 
     // DOT グラフ出力（expected が指定された場合）
-    if let Some(expected) = opts.expected {
+    if let Some(expected) = expected {
         let dot = lattice.dump_cost_dot(expected.as_str());
         println!("{dot}");
         let mut file = File::create("/tmp/dump.dot")?;
@@ -103,11 +142,11 @@ pub fn check(opts: CheckOptions) -> anyhow::Result<()> {
 
     // 候補数を制限する
     for segment in &mut result {
-        segment.truncate(opts.num_candidates);
+        segment.truncate(num_candidates);
     }
 
-    if opts.json_output {
-        print_json(opts.yomi, &result)?;
+    if json_output {
+        print_json(yomi, &result)?;
     } else {
         print_text(&result);
     }
