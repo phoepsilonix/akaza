@@ -16,6 +16,7 @@
 - ユーザー辞書メニューの初期表示と作成 by @tokuhirom in https://github.com/akaza-im/akaza/pull/372
 - 設定メニューが動作しない問題を修正 by @tokuhirom in https://github.com/akaza-im/akaza/pull/376
 - preedit テキストが黒背景に黒文字で見えない問題を修正 by @tokuhirom in https://github.com/akaza-im/akaza/pull/377
+- Bump time from 0.3.46 to 0.3.47 by @dependabot[bot] in https://github.com/akaza-im/akaza/pull/378
 
 ## [v0.2.2](https://github.com/akaza-im/akaza/compare/v0.2.1...v0.2.2) - 2026-02-03
 - Migrate from marisa-sys to rsmarisa by @tokuhirom in https://github.com/akaza-im/akaza/pull/343
