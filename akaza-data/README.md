@@ -102,12 +102,39 @@ akaza-data wordcnt-bigram --threshold 5 --corpus-dirs corpus_dir unigram.model b
 
 ### learn-corpus - 言語モデルを学習する
 
-コーパスから言語モデルのパラメータを学習します。
+コーパスから言語モデルのパラメータを学習します。変換結果が正解と一致しない場合に、正解側のユニグラム・バイグラムのスコアを調整（delta 分だけ加算）することで学習を行います。
 
 ```bash
-akaza-data learn-corpus --delta 1 may.corpus should.corpus must.corpus \
+akaza-data learn-corpus --delta 1 \
+    --may-epochs 10 --should-epochs 100 --must-epochs 1000 \
+    corpus/may.txt corpus/should.txt corpus/must.txt \
     src_unigram.model src_bigram.model dst_unigram.model dst_bigram.model
 ```
+
+#### コーパスファイル（may.txt / should.txt / must.txt）
+
+3 つのコーパスファイルは優先度別に分かれており、それぞれ学習時のエポック数（繰り返し回数）が異なります。
+
+| ファイル | デフォルトエポック数 | 用途 |
+|---|---|---|
+| `may.txt` | 10 | 変換できると望ましいが、必須ではないケース |
+| `should.txt` | 100 | 正しく変換されるべきケース |
+| `must.txt` | 1000 | 必ず正しく変換されなければならないケース |
+
+エポック数が多いほど、そのコーパスの変換結果が正解に近づくまで繰り返し学習します（全文正解になった時点で早期終了します）。
+
+#### コーパスファイルの形式
+
+[Kytea のフルアノテーションコーパス](http://www.phontron.com/kytea/io-ja.html)と同様の形式で、`表層形/読み` をスペース区切りで記述します。
+
+```
+今日/きょう は/は いい/いい 天気/てんき です/です ね/ね
+私/わたし の/の 名前/なまえ は/は 中野/なかの です/です
+```
+
+- `;;` で始まる行はコメントとして無視されます
+- 空行は無視されます
+- 表層形と読みが同じ場合（ひらがなのみの語など）は `は/は` のように同じ文字列を書きます
 
 ### dump-unigram-dict / dump-bigram-dict - 辞書をダンプする
 
