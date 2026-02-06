@@ -17,6 +17,7 @@ use crate::subcmd::make_dict::make_system_dict;
 use crate::subcmd::make_stats_system_bigram_lm::make_stats_system_bigram_lm;
 use crate::subcmd::make_stats_system_unigram_lm::make_stats_system_unigram_lm;
 use crate::subcmd::tokenize::tokenize;
+use crate::subcmd::tokenize_line::tokenize_line;
 use crate::subcmd::vocab::vocab;
 use crate::subcmd::wfreq::wfreq;
 
@@ -45,6 +46,7 @@ struct Args {
 #[derive(Debug, Subcommand)]
 enum Commands {
     Tokenize(TokenizeArgs),
+    TokenizeLine(TokenizeLineArgs),
 
     Wfreq(WfreqArgs),
     Vocab(VocabArgs),
@@ -80,6 +82,18 @@ struct TokenizeArgs {
     kana_preferred: bool,
     src_dir: String,
     dst_dir: String,
+}
+
+/// 一行の自然文をトーカナイズする
+#[derive(Debug, clap::Args)]
+struct TokenizeLineArgs {
+    #[arg(short, long)]
+    user_dict: Option<String>,
+    #[arg(short, long)]
+    system_dict: String,
+    #[arg(long)]
+    kana_preferred: bool,
+    text: String,
 }
 
 /// トーカナイズされたコーパスから単語頻度ファイルを生成する
@@ -233,6 +247,12 @@ fn main() -> anyhow::Result<()> {
             opt.kana_preferred,
             opt.src_dir.as_str(),
             opt.dst_dir.as_str(),
+        ),
+        Commands::TokenizeLine(opt) => tokenize_line(
+            opt.system_dict.as_str(),
+            opt.user_dict,
+            opt.kana_preferred,
+            opt.text.as_str(),
         ),
         Commands::Wfreq(opt) => wfreq(&opt.src_dir, opt.dst_file.as_str()),
         Commands::Vocab(opt) => vocab(opt.src_file.as_str(), opt.dst_file.as_str(), opt.threshold),
