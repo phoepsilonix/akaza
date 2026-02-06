@@ -7,10 +7,11 @@ build:
 all: build
 	$(MAKE) -C ibus-akaza all
 
-install: install-resources install-model
+install: install-resources install-model build
 	install -m 0755 target/release/ibus-akaza $(PREFIX)/bin/
 	install -m 0755 target/release/akaza-conf $(PREFIX)/bin/
 	install -m 0755 target/release/akaza-dict $(PREFIX)/bin/
+	install -m 0755 target/release/akaza-data $(PREFIX)/bin/
 	$(MAKE) -C ibus-akaza install
 
 install-model:
