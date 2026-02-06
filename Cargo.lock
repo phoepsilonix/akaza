@@ -1401,9 +1401,9 @@ checksum = "a96887878f22d7bad8a3b6dc5b7440e0ada9a245242924394987b21cf2210a4c"
 
 [[package]]
 name = "rsmarisa"
-version = "0.2.1"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e90bd8c323a3f0158b50d1fd99b9331ac94e916a5c1673d08d7665c7f3992f58"
+checksum = "e404a79e66f9548d1bd2f6fa8858513f131a2dbde16360240c25dfa286a3eaa1"
 dependencies = [
  "clap",
  "memmap2",
