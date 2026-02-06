@@ -45,8 +45,20 @@ akaza-data evaluate --corpus corpus.txt --model-dir /path/to/model
 コーパスを形態素解析器でトーカナイズします。
 
 ```bash
-akaza-data tokenize --reader wikipedia --system-dict /path/to/unidic src_dir dst_dir
+akaza-data tokenize --reader jawiki --system-dict /path/to/unidic src_dir dst_dir
 ```
+
+`--reader` には `jawiki`, `aozora_bunko` が指定可能です。
+
+### tokenize-line - 単一文をコーパス形式に変換する
+
+あらかじめ読みたい文を CLI 引数として渡し、`surface/yomi` を 1 行で出力します。たとえば:
+
+```bash
+akaza-data tokenize-line --system-dict /path/to/dict/system.dic --kana-preferred 「わたしはにほんごがすきです。」
+```
+
+`--user-dict` でユーザー辞書を追加することもでき、出力先は標準出力です。
 
 ### wfreq - 単語頻度ファイルを生成する
 
