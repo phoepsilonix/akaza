@@ -2,7 +2,7 @@ PREFIX ?= /usr
 DATADIR ?= $(PREFIX)/share
 
 build:
-	cargo build --release -p ibus-akaza -p akaza-conf -p akaza-dict
+	cargo build --release -p ibus-akaza -p akaza-conf -p akaza-dict -p akaza-data
 
 all: build
 	$(MAKE) -C ibus-akaza all

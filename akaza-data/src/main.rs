@@ -1,8 +1,14 @@
 use std::io::Write;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 
-use crate::subcmd::check::check;
+#[derive(Debug, Clone, ValueEnum)]
+enum OutputFormat {
+    Text,
+    Json,
+}
+
+use crate::subcmd::check::{check, CheckOptions};
 use crate::subcmd::dump_bigram_dict::dump_bigram_dict;
 use crate::subcmd::dump_unigram_dict::dump_unigram_dict;
 use crate::subcmd::evaluate::evaluate;
@@ -76,6 +82,7 @@ struct TokenizeArgs {
     dst_dir: String,
 }
 
+/// トーカナイズされたコーパスから単語頻度ファイルを生成する
 #[derive(Debug, clap::Args)]
 struct WfreqArgs {
     #[arg(long)]
@@ -83,6 +90,7 @@ struct WfreqArgs {
     dst_file: String,
 }
 
+/// 単語頻度ファイルから語彙リストを生成する
 #[derive(Debug, clap::Args)]
 struct VocabArgs {
     /// 語彙ファイルに収録する単語数のあしきりライン。
@@ -125,7 +133,7 @@ struct WordcntBigramArgs {
     bigram_trie_file: String,
 }
 
-/// 動作確認する
+/// コーパスから言語モデルを学習する
 #[derive(Debug, clap::Args)]
 struct LearnCorpusArgs {
     #[arg(short, long)]
@@ -145,20 +153,31 @@ struct LearnCorpusArgs {
     dst_bigram: String,
 }
 
-/// 動作確認する
+/// かな漢字変換を実行する（CLI テスト用）
 #[derive(Debug, clap::Args)]
 struct CheckArgs {
-    #[arg(short, long, default_value_t = false)]
-    user_data: bool,
     /// 変換したい読みがな
     yomi: String,
+    /// 期待する変換結果（指定すると DOT グラフを出力）
     expected: Option<String>,
+    /// ユーザーデータ（学習データ）を使用する
+    #[arg(short, long, default_value_t = false)]
+    user_data: bool,
+    /// 出力形式
+    #[arg(short, long, value_enum, default_value_t = OutputFormat::Text)]
+    format: OutputFormat,
+    /// 各文節の候補数
+    #[arg(short = 'n', long, default_value_t = 1)]
+    candidates: usize,
+    /// UTF-8 辞書ファイル（設定ファイルの辞書に追加）
     #[arg(long)]
     utf8_dict: Vec<String>,
+    /// EUC-JP 辞書ファイル（設定ファイルの辞書に追加）
     #[arg(long)]
     eucjp_dict: Vec<String>,
-    #[arg(long)]
-    model_dir: String,
+    /// モデルデータの格納ディレクトリ（省略時は設定ファイルから読み込む）
+    #[arg(short, long)]
+    model_dir: Option<String>,
 }
 
 /// 変換精度を評価する
@@ -245,14 +264,16 @@ fn main() -> anyhow::Result<()> {
             opts.dst_unigram.as_str(),
             opts.dst_bigram.as_str(),
         ),
-        Commands::Check(opt) => check(
-            &opt.yomi,
-            opt.expected,
-            opt.user_data,
-            &opt.eucjp_dict,
-            &opt.utf8_dict,
-            &opt.model_dir,
-        ),
+        Commands::Check(opt) => check(CheckOptions {
+            yomi: &opt.yomi,
+            expected: opt.expected,
+            use_user_data: opt.user_data,
+            eucjp_dict: &opt.eucjp_dict,
+            utf8_dict: &opt.utf8_dict,
+            model_dir: opt.model_dir.as_deref(),
+            json_output: matches!(opt.format, OutputFormat::Json),
+            num_candidates: opt.candidates,
+        }),
         Commands::Evaluate(opt) => {
             evaluate(&opt.corpus, &opt.eucjp_dict, &opt.utf8_dict, opt.model_dir)
         }
