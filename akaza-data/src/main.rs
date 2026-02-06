@@ -93,7 +93,7 @@ struct TokenizeLineArgs {
     system_dict: String,
     #[arg(long)]
     kana_preferred: bool,
-    text: String,
+    text: Option<String>,
 }
 
 /// トーカナイズされたコーパスから単語頻度ファイルを生成する
@@ -252,7 +252,7 @@ fn main() -> anyhow::Result<()> {
             opt.system_dict.as_str(),
             opt.user_dict,
             opt.kana_preferred,
-            opt.text.as_str(),
+            opt.text,
         ),
         Commands::Wfreq(opt) => wfreq(&opt.src_dir, opt.dst_file.as_str()),
         Commands::Vocab(opt) => vocab(opt.src_file.as_str(), opt.dst_file.as_str(), opt.threshold),

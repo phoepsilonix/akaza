@@ -3,7 +3,7 @@ use std::time::SystemTime;
 
 use anyhow::Context;
 use kelp::{kata2hira, ConvOption};
-use log::info;
+use log::{debug, info};
 use vibrato::{Dictionary, Tokenizer};
 
 use crate::tokenizer::base::{merge_terms_ipadic, AkazaTokenizer, IntermediateToken};
@@ -18,7 +18,7 @@ impl VibratoTokenizer {
         let t1 = SystemTime::now();
         let mut dict = Dictionary::read(File::open(dictpath)?)?;
         let t2 = SystemTime::now();
-        println!(
+        debug!(
             "Loaded {} in {}msec",
             dictpath,
             t2.duration_since(t1)?.as_millis()
