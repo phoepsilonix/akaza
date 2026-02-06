@@ -121,7 +121,19 @@ impl<U: SystemUnigramLM, B: SystemBigramLM> LatticeGraph<U, B> {
     }
 
     pub(crate) fn get_node_cost(&self, node: &WordNode) -> f32 {
-        if let Some(user_cost) = self.user_data.lock().unwrap().get_unigram_cost(node) {
+        let user_data = self.user_data.lock().unwrap();
+        self.get_node_cost_with_user_data(node, &user_data)
+    }
+
+    /// ロック済みの UserData を受け取るバージョン。
+    /// resolve 内で一度だけロックを取り、ループ内ではこのメソッドを使うことで
+    /// Mutex lock のオーバーヘッドを削減する。
+    pub(crate) fn get_node_cost_with_user_data(
+        &self,
+        node: &WordNode,
+        user_data: &UserData,
+    ) -> f32 {
+        if let Some(user_cost) = user_data.get_unigram_cost(node) {
             info!("Use user's node score: {:?}", node);
             // use user's score. if it's exists.
             return user_cost;
@@ -141,7 +153,20 @@ impl<U: SystemUnigramLM, B: SystemBigramLM> LatticeGraph<U, B> {
     }
 
     pub(crate) fn get_edge_cost(&self, prev: &WordNode, node: &WordNode) -> f32 {
-        if let Some(cost) = self.user_data.lock().unwrap().get_bigram_cost(prev, node) {
+        let user_data = self.user_data.lock().unwrap();
+        self.get_edge_cost_with_user_data(prev, node, &user_data)
+    }
+
+    /// ロック済みの UserData を受け取るバージョン。
+    /// resolve 内で一度だけロックを取り、ループ内ではこのメソッドを使うことで
+    /// Mutex lock のオーバーヘッドを削減する。
+    pub(crate) fn get_edge_cost_with_user_data(
+        &self,
+        prev: &WordNode,
+        node: &WordNode,
+        user_data: &UserData,
+    ) -> f32 {
+        if let Some(cost) = user_data.get_bigram_cost(prev, node) {
             return cost;
         }
 
@@ -160,6 +185,13 @@ impl<U: SystemUnigramLM, B: SystemBigramLM> LatticeGraph<U, B> {
 
     pub fn get_default_edge_cost(&self) -> f32 {
         self.system_bigram_lm.get_default_edge_cost()
+    }
+
+    /// user_data のロックを取得する。
+    /// resolve 時に一度だけロックを取り、ループ中は保持することで
+    /// Mutex lock のオーバーヘッドを削減する。
+    pub(crate) fn lock_user_data(&self) -> std::sync::MutexGuard<'_, UserData> {
+        self.user_data.lock().unwrap()
     }
 }
 
