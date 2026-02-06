@@ -116,6 +116,7 @@ pub fn evaluate(
                 info!("{} => (teacher={}, akaza={})", yomi, surface, got);
                 good_cnt += 1;
             } else {
+                println!("[BAD] '{}' '{}' '{}'", yomi, surface, got);
                 println!(
                     "{} =>\n\
                    |  corpus={}\n\
