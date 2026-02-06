@@ -116,15 +116,9 @@ pub fn evaluate(
                 info!("{} => (teacher={}, akaza={})", yomi, surface, got);
                 good_cnt += 1;
             } else {
-                println!("[BAD] '{}' '{}' '{}'", yomi, surface, got);
+                println!("[BAD] {} => corpus={}, akaza={}", yomi, surface, got);
                 println!(
-                    "{} =>\n\
-                   |  corpus={}\n\
-                   |  akaza ={}\n\
-                   Good count={} bad count={} elapsed={}ms saigen={}",
-                    yomi,
-                    surface,
-                    got,
+                    "Good count={} bad count={} elapsed={}ms saigen={}",
                     good_cnt,
                     bad_cnt,
                     elapsed.as_millis(),
