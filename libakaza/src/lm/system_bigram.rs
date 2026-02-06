@@ -133,9 +133,17 @@ impl SystemBigramLM for MarisaSystemBigramLM {
      * この ID は、unigram の trie でふられたもの。
      */
     fn get_edge_cost(&self, word_id1: i32, word_id2: i32) -> Option<f32> {
-        let mut key: Vec<u8> = Vec::new();
-        key.extend(word_id1.to_le_bytes()[0..3].iter());
-        key.extend(word_id2.to_le_bytes()[0..3].iter());
+        // スタック上に固定サイズの配列を確保してアロケーションを避ける
+        let id1_bytes = word_id1.to_le_bytes();
+        let id2_bytes = word_id2.to_le_bytes();
+        let key: [u8; 6] = [
+            id1_bytes[0],
+            id1_bytes[1],
+            id1_bytes[2],
+            id2_bytes[0],
+            id2_bytes[1],
+            id2_bytes[2],
+        ];
 
         let mut agent = Agent::new();
         agent.set_query_bytes(&key);

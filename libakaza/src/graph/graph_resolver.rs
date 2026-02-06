@@ -27,13 +27,16 @@ impl GraphResolver {
         let mut prevmap: HashMap<&WordNode, &WordNode> = HashMap::new();
         let mut costmap: HashMap<&WordNode, f32> = HashMap::new();
 
+        // user_data のロックを一度だけ取得し、ループ中は保持する
+        let user_data = lattice.lock_user_data();
+
         // 前向きに動的計画法でたどる
         for i in 1..yomi.len() + 2 {
             let Some(nodes) = &lattice.node_list(i as i32) else {
                 continue;
             };
             for node in *nodes {
-                let node_cost = lattice.get_node_cost(node);
+                let node_cost = lattice.get_node_cost_with_user_data(node, &user_data);
                 trace!("kanji={}, Cost={}", node, node_cost);
                 let mut cost = f32::MAX;
                 let mut shortest_prev = None;
@@ -44,7 +47,7 @@ impl GraphResolver {
                     )
                 })?;
                 for prev in prev_nodes {
-                    let edge_cost = lattice.get_edge_cost(prev, node);
+                    let edge_cost = lattice.get_edge_cost_with_user_data(prev, node, &user_data);
                     let prev_cost = costmap.get(prev).unwrap_or(&0_f32); // unwrap が必要なのは、 __BOS__ 用。
                     let tmp_cost = prev_cost + edge_cost + node_cost;
                     trace!(
@@ -78,6 +81,9 @@ impl GraphResolver {
                 costmap.insert(node, cost);
             }
         }
+
+        // ロックを解放
+        drop(user_data);
 
         // 後ろ向きに候補を探していく
         let eos_pos = (yomi.len() + 1) as i32;
