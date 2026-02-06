@@ -1,3 +1,5 @@
 [workspace]
 resolver = "2"
 members = ["libakaza", "ibus-akaza", "ibus-sys", "akaza-data", "akaza-conf", "akaza-dict"]
+[profile.release]
+debug = true
