@@ -497,6 +497,11 @@ impl AkazaContext {
         Ok(())
     }
 
+    /// 分節パターンを切り替える
+    pub fn cycle_segmentation(&mut self, engine: *mut IBusEngine) {
+        self.current_state.cycle_segmentation(engine);
+    }
+
     /// 文節の選択範囲を左方向に広げる
     pub fn extend_clause_left(&mut self, engine: *mut IBusEngine) -> Result<()> {
         self.current_state.extend_left(engine);

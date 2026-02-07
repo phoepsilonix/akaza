@@ -54,6 +54,10 @@ pub struct CurrentState {
     pub(crate) engine:
         BigramWordViterbiEngine<MarisaSystemUnigramLM, MarisaSystemBigramLM, MarisaKanaKanjiDict>,
     consonant_suffix_extractor: ConsonantSuffixExtractor,
+    /// k-best の分節パターン候補
+    segmentation_alternatives: Vec<Vec<Vec<Candidate>>>,
+    /// 現在選択中の分節パターン (0 = 1-best)
+    current_segmentation: usize,
 }
 
 fn next_clause_index(current: usize, len: usize, dir: i32) -> usize {
@@ -100,6 +104,8 @@ impl CurrentState {
             romkan,
             engine,
             consonant_suffix_extractor: ConsonantSuffixExtractor::default(),
+            segmentation_alternatives: Vec::new(),
+            current_segmentation: 0,
         }
     }
 
@@ -157,30 +163,42 @@ impl CurrentState {
 
     pub(crate) fn henkan(&mut self, engine: *mut IBusEngine) -> anyhow::Result<()> {
         if self.get_raw_input().is_empty() {
+            self.segmentation_alternatives.clear();
+            self.current_segmentation = 0;
             self.set_clauses(engine, vec![]);
         } else {
             let yomi = self.get_raw_input().to_string();
 
             // 先頭が大文字なケースと、URL っぽい文字列のときは変換処理を実施しない。
-            let clauses = if (!yomi.is_empty()
+            if (!yomi.is_empty()
                 && yomi.starts_with(|c: char| c.is_ascii_uppercase())
                 && self.force_selected_clause.is_empty())
                 || yomi.starts_with("https://")
                 || yomi.starts_with("http://")
             {
-                vec![Vec::from([Candidate::new(
+                self.segmentation_alternatives.clear();
+                self.current_segmentation = 0;
+                let clauses = vec![Vec::from([Candidate::new(
                     yomi.as_str(),
                     yomi.as_str(),
                     0_f32,
-                )])]
+                )])];
+                self.set_clauses(engine, clauses);
             } else {
-                self.engine.convert(
+                let paths = self.engine.convert_k_best(
                     self.romkan.to_hiragana(&yomi).as_str(),
                     Some(&self.force_selected_clause),
-                )?
+                    5,
+                )?;
+                self.segmentation_alternatives = paths;
+                self.current_segmentation = 0;
+                let clauses = self
+                    .segmentation_alternatives
+                    .first()
+                    .cloned()
+                    .unwrap_or_default();
+                self.set_clauses(engine, clauses);
             };
-
-            self.set_clauses(engine, clauses);
 
             self.adjust_current_clause(engine);
         }
@@ -297,13 +315,28 @@ impl CurrentState {
     }
 
     pub fn extend_right(&mut self, engine: *mut IBusEngine) {
+        self.current_segmentation = 0;
         self.force_selected_clause = extend_right(&self.clauses, self.current_clause);
         self.on_force_selected_clause_change(engine);
     }
 
     pub fn extend_left(&mut self, engine: *mut IBusEngine) {
+        self.current_segmentation = 0;
         self.force_selected_clause = extend_left(&self.clauses, self.current_clause);
         self.on_force_selected_clause_change(engine);
+    }
+
+    /// Tab キーで分節パターンを切り替える
+    pub fn cycle_segmentation(&mut self, engine: *mut IBusEngine) {
+        if self.segmentation_alternatives.len() <= 1 {
+            return;
+        }
+        self.current_segmentation =
+            (self.current_segmentation + 1) % self.segmentation_alternatives.len();
+        self.clauses = self.segmentation_alternatives[self.current_segmentation].clone();
+        self.node_selected.clear();
+        self.current_clause = 0;
+        self.on_clauses_change(engine);
     }
 
     pub fn on_force_selected_clause_change(&mut self, engine: *mut IBusEngine) {
