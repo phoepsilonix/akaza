@@ -170,8 +170,8 @@ struct LearnCorpusArgs {
 /// かな漢字変換を実行する（CLI テスト用）
 #[derive(Debug, clap::Args)]
 struct CheckArgs {
-    /// 変換したい読みがな
-    yomi: String,
+    /// 変換したい読みがな（省略時は stdin から行ごとに読み取る）
+    yomi: Option<String>,
     /// 期待する変換結果（指定すると DOT グラフを出力）
     expected: Option<String>,
     /// ユーザーデータ（学習データ）を使用する
@@ -285,7 +285,7 @@ fn main() -> anyhow::Result<()> {
             opts.dst_bigram.as_str(),
         ),
         Commands::Check(opt) => check(CheckOptions {
-            yomi: &opt.yomi,
+            yomi: opt.yomi,
             expected: opt.expected,
             use_user_data: opt.user_data,
             eucjp_dict: &opt.eucjp_dict,
