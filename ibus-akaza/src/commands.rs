@@ -71,14 +71,8 @@ pub fn ibus_akaza_commands_map() -> HashMap<&'static str, IbusAkazaCommand> {
         context.erase_character_before_cursor(engine);
         true
     });
-    register("cursor_up", |context, engine| {
-        context.cursor_up(engine);
-        true
-    });
-    register("cursor_down", |context, engine| {
-        context.cursor_down(engine);
-        true
-    });
+    register("cursor_up", |context, engine| context.cursor_up(engine));
+    register("cursor_down", |context, engine| context.cursor_down(engine));
     register("cursor_right", |context, engine| {
         context.cursor_right(engine);
         true
@@ -102,8 +96,7 @@ pub fn ibus_akaza_commands_map() -> HashMap<&'static str, IbusAkazaCommand> {
         true
     });
     register("cycle_segmentation", |context, engine| {
-        context.cycle_segmentation(engine);
-        true
+        context.cycle_segmentation(engine)
     });
     register("convert_to_full_hiragana", |context, engine| {
         if let Err(e) = context.convert_to_full_hiragana(engine) {

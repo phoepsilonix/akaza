@@ -48,6 +48,13 @@ pub struct CurrentState {
     pub(crate) force_selected_clause: Vec<Range<usize>>,
     /// ライブコンバージョン
     pub live_conversion: bool,
+    /// サジェストモードの有効/無効
+    pub suggest: bool,
+    /// サジェストによる自動変換中かどうか（Space で明示的に変換した場合は false）
+    pub(crate) suggest_active: bool,
+    /// サジェスト中に Tab/Up/Down で候補を選択したかどうか
+    /// true の場合、preedit に変換結果を表示し、Enter で確定する
+    pub(crate) suggest_candidate_selected: bool,
     pub(crate) lookup_table_visible: bool,
     pub lookup_table: IBusLookupTable,
     pub romkan: RomKanConverter,
@@ -82,6 +89,7 @@ impl CurrentState {
     pub fn new(
         input_mode: InputMode,
         live_conversion: bool,
+        suggest: bool,
         romkan: RomKanConverter,
         engine: BigramWordViterbiEngine<
             MarisaSystemUnigramLM,
@@ -99,6 +107,9 @@ impl CurrentState {
             node_selected: HashMap::new(),
             force_selected_clause: Vec::new(),
             live_conversion,
+            suggest,
+            suggest_active: false,
+            suggest_candidate_selected: false,
             lookup_table_visible: false,
             lookup_table: IBusLookupTable::new(10, 0, 1, 1),
             romkan,
@@ -107,6 +118,12 @@ impl CurrentState {
             segmentation_alternatives: Vec::new(),
             current_segmentation: 0,
         }
+    }
+
+    /// サジェスト表示すべきかどうかを判定する。
+    /// ひらがな2文字以上入力されている場合に true を返す。
+    fn should_suggest(&self) -> bool {
+        self.suggest && self.romkan.to_hiragana(&self.raw_input).chars().count() >= 2
     }
 
     pub(crate) fn set_input_mode(&mut self, engine: *mut IBusEngine, input_mode: &InputMode) {
@@ -123,6 +140,8 @@ impl CurrentState {
     }
 
     pub fn clear_raw_input(&mut self, engine: *mut IBusEngine) {
+        self.suggest_active = false;
+        self.suggest_candidate_selected = false;
         if !self.raw_input.is_empty() {
             self.raw_input.clear();
             self.on_raw_input_change(engine);
@@ -235,6 +254,8 @@ impl CurrentState {
     /// 変換しているときに backspace を入力した場合。
     /// 変換候補をクリアして、Conversion から Composition 状態に戻る。
     pub fn clear_clauses(&mut self, engine: *mut IBusEngine) {
+        self.suggest_active = false;
+        self.suggest_candidate_selected = false;
         if !self.clauses.is_empty() {
             self.clauses.clear();
             self.on_clauses_change(engine);
@@ -255,9 +276,29 @@ impl CurrentState {
         // 一旦、ルックアップテーブルをクリアする
         self.lookup_table.clear();
 
-        // 現在の未変換情報を元に、候補を算出していく。
+        if self.suggest_active {
+            // サジェスト中は k-best の各分節パターンの変換結果全文を表示する
+            let empty = HashMap::new();
+            for alt in &self.segmentation_alternatives {
+                let s = build_string_from_clauses(alt, &empty);
+                self.lookup_table.append_candidate(s.to_ibus_text());
+            }
+        } else {
+            // 現在の未変換情報を元に、候補を算出していく。
+            if let Some(clause) = self.clauses.get(self.current_clause) {
+                // lookup table に候補を詰め込んでいく。
+                for node in clause {
+                    let candidate = &node.surface_with_dynamic();
+                    self.lookup_table.append_candidate(candidate.to_ibus_text());
+                }
+            }
+        }
+    }
+
+    /// サジェストから Conversion に遷移する際に、文節内候補で lookup table を再構築する
+    pub fn render_lookup_table_for_conversion(&mut self) {
+        self.lookup_table.clear();
         if let Some(clause) = self.clauses.get(self.current_clause) {
-            // lookup table に候補を詰め込んでいく。
             for node in clause {
                 let candidate = &node.surface_with_dynamic();
                 self.lookup_table.append_candidate(candidate.to_ibus_text());
@@ -326,10 +367,47 @@ impl CurrentState {
         self.on_force_selected_clause_change(engine);
     }
 
-    /// Tab キーで分節パターンを切り替える
-    pub fn cycle_segmentation(&mut self, engine: *mut IBusEngine) {
+    /// サジェスト中に次の k-best パターンを選択する
+    pub fn suggest_select_next(&mut self, engine: *mut IBusEngine) -> bool {
         if self.segmentation_alternatives.len() <= 1 {
-            return;
+            return false;
+        }
+        if self.lookup_table.cursor_down() {
+            let idx = self.lookup_table.get_cursor_pos() as usize;
+            self.current_segmentation = idx;
+            self.clauses = self.segmentation_alternatives[idx].clone();
+            self.node_selected.clear();
+            self.current_clause = 0;
+            self.suggest_candidate_selected = true;
+            self.update_lookup_table(engine, true);
+            self.update_preedit(engine);
+        }
+        true
+    }
+
+    /// サジェスト中に前の k-best パターンを選択する
+    pub fn suggest_select_prev(&mut self, engine: *mut IBusEngine) -> bool {
+        if self.segmentation_alternatives.len() <= 1 {
+            return false;
+        }
+        if self.lookup_table.cursor_up() {
+            let idx = self.lookup_table.get_cursor_pos() as usize;
+            self.current_segmentation = idx;
+            self.clauses = self.segmentation_alternatives[idx].clone();
+            self.node_selected.clear();
+            self.current_clause = 0;
+            self.suggest_candidate_selected = true;
+            self.update_lookup_table(engine, true);
+            self.update_preedit(engine);
+        }
+        true
+    }
+
+    /// Tab キーで分節パターンを切り替える
+    /// 切り替え候補がない場合は false を返す
+    pub fn cycle_segmentation(&mut self, engine: *mut IBusEngine) -> bool {
+        if self.segmentation_alternatives.len() <= 1 {
+            return false;
         }
         self.current_segmentation =
             (self.current_segmentation + 1) % self.segmentation_alternatives.len();
@@ -337,6 +415,15 @@ impl CurrentState {
         self.node_selected.clear();
         self.current_clause = 0;
         self.on_clauses_change(engine);
+        // サジェスト中は lookup table のカーソルを現在の分節パターンに合わせる
+        if self.suggest_active {
+            self.suggest_candidate_selected = true;
+            self.lookup_table
+                .set_cursor_pos(self.current_segmentation as u32);
+            self.update_lookup_table(engine, true);
+            self.update_preedit(engine);
+        }
+        true
     }
 
     pub fn on_force_selected_clause_change(&mut self, engine: *mut IBusEngine) {
@@ -361,6 +448,21 @@ impl CurrentState {
             if let Err(e) = self.henkan(engine) {
                 error!("on_raw_input_change: henkan failed: {}", e);
             }
+        } else if self.should_suggest() {
+            // サジェストモード: ひらがな2文字以上で候補を表示
+            // henkan 内で on_clauses_change → render_preedit が呼ばれるため、
+            // 先に suggest_active をセットしておく
+            self.suggest_active = true;
+            self.suggest_candidate_selected = false;
+            if let Err(e) = self.henkan(engine) {
+                error!("on_raw_input_change: suggest henkan failed: {}", e);
+            }
+        } else if self.suggest && !self.clauses.is_empty() {
+            // サジェストモードだがまだ2文字未満: clauses をクリア
+            self.suggest_active = false;
+            self.suggest_candidate_selected = false;
+            self.clauses.clear();
+            self.on_clauses_change(engine);
         } else if !self.clauses.is_empty() {
             self.clauses.clear();
             self.on_clauses_change(engine);
@@ -371,11 +473,7 @@ impl CurrentState {
 
         self.update_preedit(engine);
 
-        let visible = if self.live_conversion {
-            false
-        } else {
-            self.lookup_table.get_number_of_candidates() > 0
-        };
+        let visible = !self.live_conversion && self.lookup_table.get_number_of_candidates() > 0;
         self.update_lookup_table(engine, visible);
     }
 
@@ -392,7 +490,11 @@ impl CurrentState {
 
     pub fn update_auxiliary_text(&mut self, engine: *mut IBusEngine) {
         // -- auxiliary text(ポップアップしてるやつのほう)
-        if let Some(clause) = self.clauses.get(self.current_clause) {
+        if self.suggest_active {
+            // サジェスト中は入力全体のひらがなを表示
+            let yomi = self.romkan.to_hiragana(&self.raw_input);
+            self.set_auxiliary_text(engine, &yomi);
+        } else if let Some(clause) = self.clauses.get(self.current_clause) {
             if let Some(first) = clause.first() {
                 self.set_auxiliary_text(engine, &first.yomi.clone());
             } else {
@@ -415,6 +517,15 @@ impl CurrentState {
                 self.preedit = self.build_string();
                 self.render_preedit(engine);
             }
+        } else if self.suggest_active && self.suggest_candidate_selected {
+            // サジェスト中に Tab/Up/Down で候補を選択した → 変換結果を表示
+            self.preedit = self.build_string();
+            self.render_preedit(engine);
+        } else if self.suggest_active {
+            // サジェスト中だがまだ候補を選択していない → ひらがな表示のまま
+            let (_yomi, surface) = self.make_preedit_word_for_precomposition();
+            self.preedit = surface;
+            self.render_preedit(engine);
         } else if self.clauses.is_empty() {
             // live conversion じゃなくて、変換中じゃないとき。
             let (_yomi, surface) = self.make_preedit_word_for_precomposition();
@@ -443,12 +554,18 @@ impl CurrentState {
                     preedit_char_len,
                 ),
             );
-            let bgstart: u32 = self
-                .clauses
-                .iter()
-                .filter_map(|c| c.first())
-                .map(|c| c.surface.chars().count() as u32)
-                .sum();
+            // サジェスト中（候補未選択時）は preedit がひらがなで clauses が漢字のため、
+            // clauses から bgstart を計算するとずれる。
+            // この場合は bgstart=0 にして通常の Composition と同じスタイルにする。
+            let bgstart: u32 = if self.suggest_active && !self.suggest_candidate_selected {
+                0
+            } else {
+                self.clauses
+                    .iter()
+                    .filter_map(|c| c.first())
+                    .map(|c| c.surface.chars().count() as u32)
+                    .sum()
+            };
             // 背景色を設定する（bgstart から preedit 末尾まで）。
             // end_index は preedit 全体の文字数を超えてはならない。
             // 以前は bgstart + preedit_char_len としていたため、プリエディット文字列の
@@ -459,17 +576,16 @@ impl CurrentState {
                 preedit_attrs,
                 ibus_attribute_new(
                     IBusAttrType_IBUS_ATTR_TYPE_BACKGROUND,
-                    0x00333333,
+                    0x00FFFFFF,
                     bgstart,
                     preedit_char_len,
                 ),
             );
-            // 背景色が濃いため、前景色を白にして視認性を確保する。
             ibus_attr_list_append(
                 preedit_attrs,
                 ibus_attribute_new(
                     IBusAttrType_IBUS_ATTR_TYPE_FOREGROUND,
-                    0x00FFFFFF,
+                    0x00000000,
                     bgstart,
                     preedit_char_len,
                 ),
@@ -490,6 +606,14 @@ impl CurrentState {
         if self.raw_input.is_empty() {
             // 未入力状態。
             KeyState::PreComposition
+        } else if self.suggest_active && self.suggest_candidate_selected {
+            // サジェスト中に候補を選択した → Conversion として扱う
+            // → Enter で commit_candidate が効く
+            KeyState::Conversion
+        } else if self.suggest_active {
+            // サジェスト中だが候補未選択 → Composition を維持
+            // → Space キーで update_candidates が効く
+            KeyState::Composition
         } else if !self.clauses.is_empty() {
             // 変換している状態。lookup table が表示されている状態
             KeyState::Conversion
