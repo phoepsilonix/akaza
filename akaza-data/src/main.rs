@@ -8,6 +8,7 @@ enum OutputFormat {
     Json,
 }
 
+use crate::subcmd::bench::{bench, BenchOptions};
 use crate::subcmd::check::{check, CheckOptions};
 use crate::subcmd::dump_bigram_dict::dump_bigram_dict;
 use crate::subcmd::dump_unigram_dict::dump_unigram_dict;
@@ -64,6 +65,8 @@ enum Commands {
     Check(CheckArgs),
     #[clap(arg_required_else_help = true)]
     Evaluate(EvaluateArgs),
+
+    Bench(BenchArgs),
 
     DumpUnigramDict(DumpUnigramDictArgs),
     DumpBigramDict(DumpBigramDictArgs),
@@ -210,6 +213,26 @@ struct EvaluateArgs {
     model_dir: String,
 }
 
+/// インクリメンタル変換のベンチマーク
+#[derive(Debug, clap::Args)]
+struct BenchArgs {
+    #[arg(long)]
+    corpus: Vec<String>,
+    #[arg(long)]
+    utf8_dict: Vec<String>,
+    #[arg(long)]
+    eucjp_dict: Vec<String>,
+    /// モデルデータの格納ディレクトリ（省略時は設定ファイルから読み込む）
+    #[arg(long)]
+    model_dir: Option<String>,
+    /// ベンチマーク対象の最大文数
+    #[arg(long, default_value_t = 100)]
+    max_sentences: usize,
+    /// k-best のパス数
+    #[arg(short, long, default_value_t = 5)]
+    k: usize,
+}
+
 /// ユニグラム辞書ファイルをダンプする
 #[derive(Debug, clap::Args)]
 struct DumpUnigramDictArgs {
@@ -301,6 +324,14 @@ fn main() -> anyhow::Result<()> {
         Commands::Evaluate(opt) => {
             evaluate(&opt.corpus, &opt.eucjp_dict, &opt.utf8_dict, opt.model_dir)
         }
+        Commands::Bench(opt) => bench(BenchOptions {
+            corpus: &opt.corpus,
+            eucjp_dict: &opt.eucjp_dict,
+            utf8_dict: &opt.utf8_dict,
+            model_dir: opt.model_dir.as_deref(),
+            max_sentences: opt.max_sentences,
+            k: opt.k,
+        }),
         Commands::DumpUnigramDict(opt) => dump_unigram_dict(opt.dict.as_str()),
         Commands::DumpBigramDict(opt) => {
             dump_bigram_dict(opt.unigram_file.as_str(), opt.bigram_file.as_str())

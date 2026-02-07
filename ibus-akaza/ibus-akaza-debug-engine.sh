@@ -16,4 +16,10 @@ if ! ulimit -v "$((MEM_LIMIT_MB * 1024))"; then
   echo "warning: failed to set ulimit -v (MEM_LIMIT_MB=${MEM_LIMIT_MB})" >&2
 fi
 
-exec $BASEDIR/../target/release/ibus-akaza --ibus -vv
+# dev-install プロファイルのバイナリがあればそちらを優先、なければ release を使う
+if [ -x "$BASEDIR/../target/dev-install/ibus-akaza" ] && \
+   [ "$BASEDIR/../target/dev-install/ibus-akaza" -nt "$BASEDIR/../target/release/ibus-akaza" ] 2>/dev/null; then
+  exec "$BASEDIR/../target/dev-install/ibus-akaza" --ibus -vv
+else
+  exec "$BASEDIR/../target/release/ibus-akaza" --ibus -vv
+fi

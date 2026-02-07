@@ -64,7 +64,13 @@ impl AkazaContext {
         let keymap = Keymap::load(config.keymap.as_str())?;
 
         Ok(AkazaContext {
-            current_state: CurrentState::new(input_mode, config.live_conversion, romkan, engine),
+            current_state: CurrentState::new(
+                input_mode,
+                config.live_conversion,
+                config.suggest,
+                romkan,
+                engine,
+            ),
             command_map: ibus_akaza_commands_map(),
             keymap: IBusKeyMap::new(keymap)?,
             prop_controller: PropController::new(input_mode, config)?,
@@ -255,9 +261,13 @@ impl AkazaContext {
                         self.current_state.get_raw_input()
                     );
 
-                    if self.current_state.lookup_table_visible {
+                    if self.current_state.lookup_table_visible
+                        && !self.current_state.suggest_active
+                        && !self.current_state.suggest_candidate_selected
+                    {
                         // 変換の途中に別の文字が入力された。
                         // よって、現在の preedit 文字列は確定させる。
+                        // （サジェスト中はまだ Composition なので確定しない）
                         self.commit_candidate(engine);
                     }
 
@@ -303,8 +313,11 @@ impl AkazaContext {
     }
 
     pub(crate) fn erase_character_before_cursor(&mut self, engine: *mut IBusEngine) {
-        if !self.current_state.live_conversion && !self.current_state.clauses.is_empty() {
-            // ライブ変換ではない時で変換フェーズな時に一文字消した場合は、変換状態から変換前の状態に戻す。
+        if !self.current_state.live_conversion
+            && !self.current_state.suggest_active
+            && !self.current_state.clauses.is_empty()
+        {
+            // ライブ変換でもサジェスト中でもない時で変換フェーズな時に一文字消した場合は、変換状態から変換前の状態に戻す。
 
             // 変換候補をクリアする
             self.current_state.clear_clauses(engine);
@@ -386,7 +399,11 @@ impl AkazaContext {
             return false;
         }
 
-        if let Err(e) = self.current_state.henkan(engine) {
+        if self.current_state.suggest_active {
+            // サジェスト中は既に clauses があるので、そのまま Conversion に遷移
+            self.current_state.suggest_active = false;
+            self.current_state.suggest_candidate_selected = false;
+        } else if let Err(e) = self.current_state.henkan(engine) {
             error!("update_candidates: henkan failed: {}", e);
             return false;
         }
@@ -394,6 +411,9 @@ impl AkazaContext {
             // たぶん到達しないはず
             return true;
         }
+
+        // Conversion 用の lookup table を再構築（文節内の候補一覧）
+        self.current_state.render_lookup_table_for_conversion();
 
         // -- auxiliary text(ポップアップしてるやつのほう)
         if let Some(clause) = self
@@ -407,6 +427,9 @@ impl AkazaContext {
             }
         }
 
+        // preedit を変換結果表示に更新
+        self.current_state.update_preedit(engine);
+
         // 明示的に変換しているので、lookup table を表示する。
         self.current_state.update_lookup_table(engine, true);
 
@@ -414,7 +437,10 @@ impl AkazaContext {
     }
 
     /// 前の変換候補を選択する。
-    pub(crate) fn cursor_up(&mut self, engine: *mut IBusEngine) {
+    pub(crate) fn cursor_up(&mut self, engine: *mut IBusEngine) -> bool {
+        if self.current_state.suggest_active {
+            return self.suggest_select_prev(engine);
+        }
         if self.current_state.lookup_table.cursor_up() {
             let cursor_pos = self.current_state.lookup_table.get_cursor_pos() as usize;
             self.current_state.select_candidate(engine, cursor_pos);
@@ -422,16 +448,31 @@ impl AkazaContext {
             // lookup table の表示を更新する
             self.current_state.update_lookup_table(engine, true);
         }
+        true
     }
 
     /// 次の変換候補を選択する。
-    pub fn cursor_down(&mut self, engine: *mut IBusEngine) {
+    pub fn cursor_down(&mut self, engine: *mut IBusEngine) -> bool {
+        if self.current_state.suggest_active {
+            return self.suggest_select_next(engine);
+        }
         if self.current_state.lookup_table.cursor_down() {
             let cursor_pos = self.current_state.lookup_table.get_cursor_pos() as usize;
             self.current_state.select_candidate(engine, cursor_pos);
             // lookup table の表示を更新する
             self.current_state.update_lookup_table(engine, true);
         }
+        true
+    }
+
+    /// サジェスト中に次の k-best パターンを選択する
+    fn suggest_select_next(&mut self, engine: *mut IBusEngine) -> bool {
+        self.current_state.suggest_select_next(engine)
+    }
+
+    /// サジェスト中に前の k-best パターンを選択する
+    fn suggest_select_prev(&mut self, engine: *mut IBusEngine) -> bool {
+        self.current_state.suggest_select_prev(engine)
     }
 
     pub fn page_up(&mut self, engine: *mut IBusEngine) -> bool {
@@ -498,8 +539,9 @@ impl AkazaContext {
     }
 
     /// 分節パターンを切り替える
-    pub fn cycle_segmentation(&mut self, engine: *mut IBusEngine) {
-        self.current_state.cycle_segmentation(engine);
+    /// 切り替え候補がない場合は false を返す（キーをアプリに渡す）
+    pub fn cycle_segmentation(&mut self, engine: *mut IBusEngine) -> bool {
+        self.current_state.cycle_segmentation(engine)
     }
 
     /// 文節の選択範囲を左方向に広げる
@@ -644,6 +686,9 @@ impl AkazaContext {
 
         if self.current_state.live_conversion {
             self.current_state.clear_raw_input(engine);
+        } else if self.current_state.suggest_active {
+            // サジェスト中は clauses をクリアして suggest_active をリセット
+            self.current_state.clear_clauses(engine);
         } else {
             // 変換候補の分節をクリアする。
             self.current_state.clear_clauses(engine);
