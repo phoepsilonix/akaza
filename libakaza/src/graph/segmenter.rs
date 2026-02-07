@@ -165,7 +165,10 @@ impl Segmenter {
 
                 trace!("There's no candidates. '{}'", yomi);
 
-                let (_, c) = yomi.char_indices().next().unwrap();
+                let Some((_, c)) = yomi.char_indices().next() else {
+                    warn!("Empty yomi in segmentation at start_pos={}", start_pos);
+                    continue;
+                };
                 let first = &yomi[0..c.len_utf8()];
                 let ends_at = start_pos + first.len();
 
