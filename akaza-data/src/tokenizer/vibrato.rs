@@ -1,12 +1,14 @@
+use std::borrow::Cow;
 use std::fs::File;
 use std::time::SystemTime;
 
 use anyhow::Context;
-use kelp::{kata2hira, ConvOption};
 use log::{debug, info};
 use vibrato::{Dictionary, Tokenizer};
 
-use crate::tokenizer::base::{merge_terms_ipadic, AkazaTokenizer, IntermediateToken};
+use crate::tokenizer::base::{
+    kata2hira_into, merge_terms_ipadic, AkazaTokenizer, IntermediateToken,
+};
 
 pub struct VibratoTokenizer {
     tokenizer: Tokenizer,
@@ -49,44 +51,42 @@ impl AkazaTokenizer for VibratoTokenizer {
         worker.tokenize();
 
         let mut intermediates: Vec<IntermediateToken> = Vec::new();
+        let mut yomi_buf = String::new();
 
         // Vibrato/mecab の場合、接尾辞などが細かく分かれることは少ないが、
         // 一方で、助詞/助動詞などが細かくわかれがち。
         for i in 0..worker.num_tokens() {
             let token = worker.token(i);
             let feature: Vec<&str> = token.feature().split(',').collect();
-            // if feature.len() <= 7 {
-            //     println!("Too few features: {}/{}", token.surface(), token.feature())
-            // }
 
             let hinshi = feature[0];
             let subhinshi = if feature.len() > 2 { feature[1] } else { "UNK" };
             let subsubhinshi = if feature.len() > 3 { feature[2] } else { "UNK" };
-            let yomi = if feature.len() > 7 {
+            let yomi_raw = if feature.len() > 7 {
                 feature[7]
             } else {
                 // 読みがな不明なもの。固有名詞など。
                 // サンデフィヨルド・フォトバル/名詞,固有名詞,組織,*,*,*,*
                 token.surface()
             };
-            let yomi = kata2hira(yomi, ConvOption::default());
+            kata2hira_into(yomi_raw, &mut yomi_buf);
+            let yomi = yomi_buf.clone();
             let surface = if should_be_kana(kana_preferred, hinshi, subhinshi) {
-                yomi.to_string()
+                Cow::Owned(yomi.clone())
             } else {
-                token.surface().to_string()
+                Cow::Owned(token.surface().to_string())
             };
-            let intermediate = IntermediateToken::new(
+            let intermediate = IntermediateToken {
                 surface,
-                yomi.to_string(),
-                hinshi.to_string(),
-                subhinshi.to_string(),
-                subsubhinshi.to_string(),
-            );
+                yomi: Cow::Owned(yomi),
+                hinshi,
+                subhinshi,
+                subsubhinshi,
+            };
             intermediates.push(intermediate);
-            // println!("{}/{}/{}", token.surface(), hinshi, yomi);
         }
 
-        Ok(merge_terms_ipadic(intermediates))
+        Ok(merge_terms_ipadic(&intermediates))
     }
 }
 
