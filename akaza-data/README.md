@@ -34,6 +34,15 @@ akaza-data check --user-data きょうはいいてんきですね
 
 # モデルディレクトリを指定
 akaza-data check --model-dir /path/to/model きょうはいいてんきですね
+
+# k-best: 上位 k 個の分節パターン（文節の区切り方）を表示
+akaza-data check --k-best 5 きたかなざわ
+# => [1] 北/金沢 (cost: ...)
+# => [2] 来た/かなざわ (cost: ...)
+# => ...
+
+# k-best + JSON
+akaza-data check --k-best 3 --format json きょうはいいてんきですね
 ```
 
 ### evaluate - 変換精度を評価する
