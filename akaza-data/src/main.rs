@@ -192,6 +192,9 @@ struct CheckArgs {
     /// モデルデータの格納ディレクトリ（省略時は設定ファイルから読み込む）
     #[arg(short, long)]
     model_dir: Option<String>,
+    /// k-best 分節パターン数（指定すると上位 k 個の分節パターンを表示）
+    #[arg(short, long)]
+    k_best: Option<usize>,
 }
 
 /// 変換精度を評価する
@@ -293,6 +296,7 @@ fn main() -> anyhow::Result<()> {
             model_dir: opt.model_dir.as_deref(),
             json_output: matches!(opt.format, OutputFormat::Json),
             num_candidates: opt.candidates,
+            k_best: opt.k_best,
         }),
         Commands::Evaluate(opt) => {
             evaluate(&opt.corpus, &opt.eucjp_dict, &opt.utf8_dict, opt.model_dir)

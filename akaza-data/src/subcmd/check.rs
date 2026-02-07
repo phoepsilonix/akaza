@@ -43,6 +43,7 @@ pub struct CheckOptions<'a> {
     pub model_dir: Option<&'a str>,
     pub json_output: bool,
     pub num_candidates: usize,
+    pub k_best: Option<usize>,
 }
 
 pub fn check(opts: CheckOptions) -> anyhow::Result<()> {
@@ -103,6 +104,7 @@ pub fn check(opts: CheckOptions) -> anyhow::Result<()> {
                 opts.expected,
                 opts.json_output,
                 opts.num_candidates,
+                opts.k_best,
             )?;
         }
         None => {
@@ -113,7 +115,14 @@ pub fn check(opts: CheckOptions) -> anyhow::Result<()> {
                 if line.is_empty() {
                     continue;
                 }
-                check_one_line(&engine, &line, None, opts.json_output, opts.num_candidates)?;
+                check_one_line(
+                    &engine,
+                    &line,
+                    None,
+                    opts.json_output,
+                    opts.num_candidates,
+                    opts.k_best,
+                )?;
             }
         }
     }
@@ -127,6 +136,7 @@ fn check_one_line<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict>(
     expected: Option<String>,
     json_output: bool,
     num_candidates: usize,
+    k_best: Option<usize>,
 ) -> anyhow::Result<()> {
     let lattice = engine.to_lattice(yomi, None)?;
 
@@ -138,17 +148,28 @@ fn check_one_line<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict>(
         file.write_all(dot.as_bytes())?;
     }
 
-    let mut result = engine.resolve(&lattice)?;
+    if let Some(k) = k_best {
+        // k-best モード: 上位 k 個の分節パターンを表示
+        let paths = engine.graph_resolver.resolve_k_best(&lattice, k)?;
 
-    // 候補数を制限する
-    for segment in &mut result {
-        segment.truncate(num_candidates);
-    }
-
-    if json_output {
-        print_json(yomi, &result)?;
+        if json_output {
+            print_k_best_json(yomi, &paths, num_candidates)?;
+        } else {
+            print_k_best_text(&paths);
+        }
     } else {
-        print_text(&result);
+        let mut result = engine.resolve(&lattice)?;
+
+        // 候補数を制限する
+        for segment in &mut result {
+            segment.truncate(num_candidates);
+        }
+
+        if json_output {
+            print_json(yomi, &result)?;
+        } else {
+            print_text(&result);
+        }
     }
 
     Ok(())
@@ -193,6 +214,87 @@ fn print_json(input: &str, result: &[Vec<Candidate>]) -> anyhow::Result<()> {
         segments,
         best_result: best_result.join("/"),
         total_cost,
+    };
+
+    println!("{}", serde_json::to_string_pretty(&output)?);
+    Ok(())
+}
+
+fn print_k_best_text(paths: &[Vec<Vec<Candidate>>]) {
+    for (i, path) in paths.iter().enumerate() {
+        let text: Vec<String> = path
+            .iter()
+            .filter_map(|segment| segment.first().map(|c| c.surface_with_dynamic()))
+            .collect();
+        let total_cost: f32 = path
+            .iter()
+            .filter_map(|segment| segment.first().map(|c| c.cost))
+            .sum();
+        println!("[{}] {} (cost: {:.4})", i + 1, text.join("/"), total_cost);
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct KBestJsonOutput {
+    input: String,
+    paths: Vec<KBestPathOutput>,
+}
+
+#[derive(Debug, Serialize)]
+struct KBestPathOutput {
+    rank: usize,
+    segments: Vec<SegmentOutput>,
+    best_result: String,
+    total_cost: f32,
+}
+
+fn print_k_best_json(
+    input: &str,
+    paths: &[Vec<Vec<Candidate>>],
+    num_candidates: usize,
+) -> anyhow::Result<()> {
+    let paths_output: Vec<KBestPathOutput> = paths
+        .iter()
+        .enumerate()
+        .map(|(i, path)| {
+            let segments: Vec<SegmentOutput> = path
+                .iter()
+                .map(|segment| {
+                    let yomi = segment.first().map(|c| c.yomi.clone()).unwrap_or_default();
+                    let candidates: Vec<CandidateOutput> = segment
+                        .iter()
+                        .take(num_candidates)
+                        .map(|c| CandidateOutput {
+                            surface: c.surface_with_dynamic(),
+                            cost: c.cost,
+                        })
+                        .collect();
+                    SegmentOutput { yomi, candidates }
+                })
+                .collect();
+
+            let best_result: Vec<String> = path
+                .iter()
+                .filter_map(|segment| segment.first().map(|c| c.surface_with_dynamic()))
+                .collect();
+
+            let total_cost: f32 = path
+                .iter()
+                .filter_map(|segment| segment.first().map(|c| c.cost))
+                .sum();
+
+            KBestPathOutput {
+                rank: i + 1,
+                segments,
+                best_result: best_result.join("/"),
+                total_cost,
+            }
+        })
+        .collect();
+
+    let output = KBestJsonOutput {
+        input: input.to_string(),
+        paths: paths_output,
     };
 
     println!("{}", serde_json::to_string_pretty(&output)?);
