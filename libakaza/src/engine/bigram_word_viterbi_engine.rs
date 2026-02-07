@@ -57,6 +57,16 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> HenkanEngine
         let lattice = self.to_lattice(yomi, force_ranges)?;
         self.resolve(&lattice)
     }
+
+    fn convert_k_best(
+        &self,
+        yomi: &str,
+        force_ranges: Option<&[Range<usize>]>,
+        k: usize,
+    ) -> Result<Vec<Vec<Vec<Candidate>>>> {
+        let lattice = self.to_lattice(yomi, force_ranges)?;
+        self.graph_resolver.resolve_k_best(&lattice, k)
+    }
 }
 
 impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> BigramWordViterbiEngine<U, B, KD> {
