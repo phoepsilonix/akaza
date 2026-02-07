@@ -107,6 +107,7 @@ pub fn build_core_pane(config: Arc<Mutex<Config>>) -> anyhow::Result<Grid> {
         1,
     );
     {
+        let config_for_suggest = config.clone();
         let check_box = CheckButton::builder()
             .label("ライブ変換")
             .active(config.lock().unwrap().live_conversion)
@@ -114,6 +115,15 @@ pub fn build_core_pane(config: Arc<Mutex<Config>>) -> anyhow::Result<Grid> {
         grid.attach(&check_box, 0, 3, 1, 1);
         check_box.connect_toggled(move |f| {
             config.lock().unwrap().live_conversion = f.is_active();
+        });
+
+        let check_box = CheckButton::builder()
+            .label("サジェスト")
+            .active(config_for_suggest.lock().unwrap().suggest)
+            .build();
+        grid.attach(&check_box, 0, 4, 1, 1);
+        check_box.connect_toggled(move |f| {
+            config_for_suggest.lock().unwrap().suggest = f.is_active();
         });
     }
     Ok(grid)
