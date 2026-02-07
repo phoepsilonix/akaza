@@ -24,7 +24,6 @@ mod system_dict {
     use std::io::BufReader;
 
     use anyhow::{bail, Context};
-    use kelp::{kata2hira, ConvOption};
     use log::trace;
     use regex::Regex;
 
@@ -179,7 +178,7 @@ mod system_dict {
                 && surface == yomi
             {
                 dict.insert(
-                    kata2hira(surface, ConvOption::default()),
+                    crate::tokenizer::base::kata2hira_string(surface),
                     vec![yomi.to_string()],
                 );
             }

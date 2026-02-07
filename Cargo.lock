@@ -46,7 +46,6 @@ dependencies = [
  "clap-verbosity-flag",
  "encoding_rs",
  "env_logger",
- "kelp",
  "lcs",
  "libakaza",
  "log",
