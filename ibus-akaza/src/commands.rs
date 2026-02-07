@@ -101,6 +101,10 @@ pub fn ibus_akaza_commands_map() -> HashMap<&'static str, IbusAkazaCommand> {
         }
         true
     });
+    register("cycle_segmentation", |context, engine| {
+        context.cycle_segmentation(engine);
+        true
+    });
     register("convert_to_full_hiragana", |context, engine| {
         if let Err(e) = context.convert_to_full_hiragana(engine) {
             error!("convert_to_full_hiragana failed: {}", e);

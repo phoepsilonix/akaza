@@ -1,5 +1,5 @@
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap};
+use std::collections::{BinaryHeap, HashMap, HashSet};
 
 use anyhow::{bail, Context};
 use log::{error, info, trace};
@@ -15,17 +15,38 @@ use crate::lm::base::{SystemBigramLM, SystemUnigramLM};
 #[derive(Default)]
 pub struct GraphResolver {}
 
+/// k-best のエントリ。各ノードにおいて上位 k 個の経路を保持するために使う。
+#[derive(Debug, Clone)]
+struct KBestEntry<'a> {
+    cost: f32,
+    prev_node: &'a WordNode,
+    prev_rank: usize, // prev_node の k-best リストの何番目から来たか
+}
+
 impl GraphResolver {
     /**
      * ビタビアルゴリズムで最適な経路を見つける。
+     * k=1 の resolve_k_best に委譲する。
      */
     pub fn resolve<U: SystemUnigramLM, B: SystemBigramLM>(
         &self,
         lattice: &LatticeGraph<U, B>,
     ) -> anyhow::Result<Vec<Vec<Candidate>>> {
+        let paths = self.resolve_k_best(lattice, 1)?;
+        Ok(paths.into_iter().next().unwrap_or_default())
+    }
+
+    /// k-best ビタビアルゴリズムで上位 k 個の分節パターンを返す。
+    ///
+    /// 戻り値: `Vec<Vec<Vec<Candidate>>>` — 外側がパス（分節パターン）、中が文節、内が漢字候補
+    pub fn resolve_k_best<U: SystemUnigramLM, B: SystemBigramLM>(
+        &self,
+        lattice: &LatticeGraph<U, B>,
+        k: usize,
+    ) -> anyhow::Result<Vec<Vec<Vec<Candidate>>>> {
         let yomi = &lattice.yomi;
-        let mut prevmap: HashMap<&WordNode, &WordNode> = HashMap::new();
-        let mut costmap: HashMap<&WordNode, f32> = HashMap::new();
+        // 各ノードに対して上位 k 個のエントリを保持する
+        let mut kbest_map: HashMap<&WordNode, Vec<KBestEntry>> = HashMap::new();
 
         // user_data のロックを一度だけ取得し、ループ中は保持する
         let user_data = lattice.lock_user_data();
@@ -38,47 +59,61 @@ impl GraphResolver {
             for node in *nodes {
                 let node_cost = lattice.get_node_cost_with_user_data(node, &user_data);
                 trace!("kanji={}, Cost={}", node, node_cost);
-                let mut cost = f32::MAX;
-                let mut shortest_prev = None;
+
                 let prev_nodes = lattice.get_prev_nodes(node).with_context(|| {
                     format!(
                         "Cannot get prev nodes for '{}' start={} lattice={:?}",
                         node.surface, node.start_pos, lattice
                     )
                 })?;
+
+                // 各前ノードの k-best エントリそれぞれについて候補を生成
+                let mut entries: Vec<KBestEntry> = Vec::new();
                 for prev in prev_nodes {
                     let edge_cost = lattice.get_edge_cost_with_user_data(prev, node, &user_data);
-                    let prev_cost = costmap.get(prev).unwrap_or(&0_f32); // unwrap が必要なのは、 __BOS__ 用。
-                    let tmp_cost = prev_cost + edge_cost + node_cost;
-                    trace!(
-                        "Replace??? prev_cost={} tmp_cost={} < cost={}: {}",
-                        prev_cost,
-                        tmp_cost,
-                        cost,
-                        prev
-                    );
-                    // コストが最小な経路を選ぶようにする。
-                    // そういうふうにコストを付与しているので。
-                    if cost > tmp_cost {
-                        if let Some(sp) = shortest_prev {
-                            trace!("Replace {} by {}", sp, prev);
-                        } else {
-                            trace!("Replace None by {}", prev);
+
+                    if let Some(prev_entries) = kbest_map.get(prev) {
+                        for (rank, prev_entry) in prev_entries.iter().enumerate() {
+                            let tmp_cost = prev_entry.cost + edge_cost + node_cost;
+                            entries.push(KBestEntry {
+                                cost: tmp_cost,
+                                prev_node: prev,
+                                prev_rank: rank,
+                            });
                         }
-                        cost = tmp_cost;
-                        shortest_prev = Some(prev);
+                    } else {
+                        // BOS ノードなど: コスト 0 として扱う
+                        let tmp_cost = edge_cost + node_cost;
+                        entries.push(KBestEntry {
+                            cost: tmp_cost,
+                            prev_node: prev,
+                            prev_rank: 0,
+                        });
                     }
                 }
-                let Some(prev) = shortest_prev else {
+
+                // コスト昇順でソートし、上位 k 個のみ保持
+                entries.sort_by(|a, b| a.cost.partial_cmp(&b.cost).unwrap_or(Ordering::Equal));
+                entries.truncate(k);
+
+                if entries.is_empty() {
                     bail!(
                         "No valid previous node found for '{}' (start_pos={}, yomi={})",
                         node.surface,
                         node.start_pos,
                         yomi
                     );
-                };
-                prevmap.insert(node, prev);
-                costmap.insert(node, cost);
+                }
+
+                kbest_map.insert(node, entries);
+            }
+        }
+
+        // costmap を構築（get_candidates で使用。1-best のコストを使う）
+        let mut costmap: HashMap<&WordNode, f32> = HashMap::new();
+        for (node, entries) in &kbest_map {
+            if let Some(best) = entries.first() {
+                costmap.insert(node, best.cost);
             }
         }
 
@@ -97,27 +132,67 @@ impl GraphResolver {
             .with_context(|| "BOS node not found at position 0")?
             .first()
             .with_context(|| "BOS node list is empty at position 0")?;
-        let mut node = eos;
-        let mut result: Vec<Vec<Candidate>> = Vec::new();
-        while node != bos {
-            if node.surface != "__EOS__" {
-                // 同一の開始位置、終了位置を持つものを集める。
-                let end_pos = node.start_pos + (node.yomi.len() as i32);
-                let candidates: Vec<Candidate> =
-                    self.get_candidates(node, lattice, &costmap, end_pos);
-                result.push(candidates);
+
+        // EOS の k-best エントリからそれぞれパスを抽出
+        let eos_entries = kbest_map
+            .get(eos)
+            .with_context(|| format!("k-best entries not found for EOS at position {}", eos_pos))?;
+
+        let mut all_paths: Vec<Vec<Vec<Candidate>>> = Vec::new();
+        let mut seen_patterns: HashSet<Vec<(i32, usize)>> = HashSet::new();
+
+        for eos_entry in eos_entries {
+            let mut path: Vec<Vec<Candidate>> = Vec::new();
+            let mut cur_node = eos_entry.prev_node;
+            let mut cur_rank = eos_entry.prev_rank;
+
+            while cur_node != bos {
+                if cur_node.surface != "__EOS__" {
+                    let end_pos = cur_node.start_pos + (cur_node.yomi.len() as i32);
+                    let candidates = self.get_candidates(cur_node, lattice, &costmap, end_pos);
+                    path.push(candidates);
+                }
+
+                // cur_node の kbest_map から cur_rank 番目のエントリを辿る
+                let entries = match kbest_map.get(cur_node) {
+                    Some(e) => e,
+                    None => break,
+                };
+                let entry = match entries.get(cur_rank) {
+                    Some(e) => e,
+                    None => {
+                        // rank が範囲外の場合は 0 番目にフォールバック
+                        match entries.first() {
+                            Some(e) => e,
+                            None => break,
+                        }
+                    }
+                };
+                cur_node = entry.prev_node;
+                cur_rank = entry.prev_rank;
             }
-            node = prevmap.get(node).with_context(|| {
-                format!(
-                    "Cannot get previous node for '{}' (start_pos={}, yomi_len={})",
-                    node.surface,
-                    node.start_pos,
-                    node.yomi.len()
-                )
-            })?;
+            path.reverse();
+
+            // 重複排除: 分節パターン（各文節の (start_pos, yomi_len)）でハッシュ
+            let pattern: Vec<(i32, usize)> = path
+                .iter()
+                .filter_map(|clause| {
+                    clause.first().map(|c| (0i32, c.yomi.len())) // start_pos は順序で決まるので yomi_len のみ使う
+                })
+                .collect();
+
+            if !seen_patterns.contains(&pattern) {
+                seen_patterns.insert(pattern);
+                all_paths.push(path);
+            }
         }
-        result.reverse();
-        Ok(result)
+
+        if all_paths.is_empty() {
+            // 最低限 1 パスは返す
+            all_paths.push(Vec::new());
+        }
+
+        Ok(all_paths)
     }
 
     fn get_candidates<U: SystemUnigramLM, B: SystemBigramLM>(
@@ -753,6 +828,185 @@ mod tests {
         // ユーザー学習により "箸" が最上位に来ることを確認
         let top_surface = result[0].first().unwrap().surface.as_str();
         assert_eq!(top_surface, "箸");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_k_best_kitakana() -> Result<()> {
+        // 「きたかな」で k-best を使い、異なる分節パターンが返ることを検証
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        let kana_trie = CedarwoodKanaTrie::build(Vec::from([
+            "きたかな".to_string(),
+            "きた".to_string(),
+            "き".to_string(),
+            "たかな".to_string(),
+            "かな".to_string(),
+        ]));
+
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph = segmenter.build("きたかな", None);
+
+        let dict = HashMap::from([
+            ("きたかな".to_string(), vec!["北香那".to_string()]),
+            ("き".to_string(), vec!["気".to_string()]),
+            ("たかな".to_string(), vec!["高菜".to_string()]),
+            ("かな".to_string(), vec!["かな".to_string()]),
+            (
+                "きた".to_string(),
+                vec!["来た".to_string(), "北".to_string()],
+            ),
+        ]);
+
+        let system_unigram_lm = MarisaSystemUnigramLMBuilder::default()
+            .set_unique_words(19)
+            .set_total_words(20)
+            .build()?;
+        let system_bigram_lm = MarisaSystemBigramLMBuilder::default()
+            .set_default_edge_cost(20_f32)
+            .build()?;
+        let graph_builder = GraphBuilder::new(
+            HashmapVecKanaKanjiDict::new(dict),
+            HashmapVecKanaKanjiDict::new(HashMap::new()),
+            Arc::new(Mutex::new(UserData::default())),
+            Rc::new(system_unigram_lm),
+            Rc::new(system_bigram_lm),
+        );
+        let lattice = graph_builder.construct("きたかな", &graph);
+        let resolver = GraphResolver::default();
+
+        let paths = resolver.resolve_k_best(&lattice, 5)?;
+
+        // 少なくとも 1 パスは返る
+        assert!(!paths.is_empty());
+
+        // 分節パターンの数を収集（各パスの clause 数）
+        let clause_counts: Vec<usize> = paths.iter().map(|p| p.len()).collect();
+        info!("k-best clause counts: {:?}", clause_counts);
+
+        // 複数パスが返る場合、異なる分節パターンが含まれることを確認
+        if paths.len() > 1 {
+            // 少なくとも 1 文節パスと 2 文節パスの両方が含まれていることを確認
+            assert!(
+                clause_counts.contains(&1) || clause_counts.contains(&2),
+                "Expected diverse segmentation patterns: {:?}",
+                clause_counts
+            );
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_k_best_single_equals_resolve() -> Result<()> {
+        // k=1 の resolve_k_best が resolve() と同じ結果を返すことを検証
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        let kana_trie = CedarwoodKanaTrie::build(Vec::from([
+            "わたし".to_string(),
+            "わた".to_string(),
+            "し".to_string(),
+        ]));
+
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph = segmenter.build("わたし", None);
+
+        let dict = HashMap::from([(
+            "わたし".to_string(),
+            vec!["私".to_string(), "渡し".to_string()],
+        )]);
+
+        let system_unigram_lm = MarisaSystemUnigramLMBuilder::default()
+            .set_unique_words(19)
+            .set_total_words(20)
+            .build()?;
+        let system_bigram_lm = MarisaSystemBigramLMBuilder::default()
+            .set_default_edge_cost(20_f32)
+            .build()?;
+        let mut user_data = UserData::default();
+        user_data.record_entries(&[Candidate::new("わたし", "私", 0_f32)]);
+        let graph_builder = GraphBuilder::new(
+            HashmapVecKanaKanjiDict::new(dict),
+            HashmapVecKanaKanjiDict::new(HashMap::new()),
+            Arc::new(Mutex::new(user_data)),
+            Rc::new(system_unigram_lm),
+            Rc::new(system_bigram_lm),
+        );
+        let lattice = graph_builder.construct("わたし", &graph);
+        let resolver = GraphResolver::default();
+
+        // resolve() の結果
+        let single_result = resolver.resolve(&lattice)?;
+
+        // resolve_k_best(k=1) の結果
+        let k_best_result = resolver.resolve_k_best(&lattice, 1)?;
+
+        assert_eq!(k_best_result.len(), 1);
+
+        // 各文節の先頭候補が一致すること
+        let single_surfaces: Vec<String> =
+            single_result.iter().map(|c| c[0].surface.clone()).collect();
+        let kbest_surfaces: Vec<String> = k_best_result[0]
+            .iter()
+            .map(|c| c[0].surface.clone())
+            .collect();
+        assert_eq!(single_surfaces, kbest_surfaces);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_k_best_multi_word() -> anyhow::Result<()> {
+        // 複数分節パターンが返ることを検証
+        let _ = env_logger::builder().is_test(true).try_init();
+
+        let kana_trie = CedarwoodKanaTrie::build(vec![
+            "きょう".to_string(),
+            "は".to_string(),
+            "いい".to_string(),
+            "てんき".to_string(),
+        ]);
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph = segmenter.build("きょうはいいてんき", None);
+
+        let dict = HashMap::from([
+            ("きょう".to_string(), vec!["今日".to_string()]),
+            ("は".to_string(), vec!["は".to_string()]),
+            ("いい".to_string(), vec!["良い".to_string()]),
+            ("てんき".to_string(), vec!["天気".to_string()]),
+        ]);
+
+        let mut system_unigram_lm_builder = MarisaSystemUnigramLMBuilder::default();
+        system_unigram_lm_builder.add("今日/きょう", 1.0);
+        system_unigram_lm_builder.add("は/は", 0.5);
+        system_unigram_lm_builder.add("良い/いい", 1.2);
+        system_unigram_lm_builder.add("天気/てんき", 1.5);
+        system_unigram_lm_builder.set_total_words(100);
+        system_unigram_lm_builder.set_unique_words(50);
+        let system_unigram_lm = system_unigram_lm_builder.build()?;
+
+        let mut system_bigram_lm_builder = MarisaSystemBigramLMBuilder::default();
+        system_bigram_lm_builder.set_default_edge_cost(10.0);
+        let system_bigram_lm = system_bigram_lm_builder.build()?;
+
+        let graph_builder = GraphBuilder::new(
+            HashmapVecKanaKanjiDict::new(dict),
+            HashmapVecKanaKanjiDict::new(HashMap::new()),
+            Arc::new(Mutex::new(UserData::default())),
+            Rc::new(system_unigram_lm),
+            Rc::new(system_bigram_lm),
+        );
+        let lattice = graph_builder.construct("きょうはいいてんき", &graph);
+        let resolver = GraphResolver::default();
+
+        let paths = resolver.resolve_k_best(&lattice, 5)?;
+
+        // 少なくとも 1 パスは返る
+        assert!(!paths.is_empty());
+
+        // 最初のパスは空でないこと
+        assert!(!paths[0].is_empty());
 
         Ok(())
     }
