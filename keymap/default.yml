@@ -61,6 +61,9 @@ keys:
     key: [Left, KP_Left]
     command: cursor_left
   - states: [Conversion]
+    key: [Tab]
+    command: cycle_segmentation
+  - states: [Conversion]
     key: [S-Right, S-KP_Right]
     command: extend_clause_right
   - states: [Conversion]
