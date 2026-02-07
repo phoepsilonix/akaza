@@ -38,6 +38,10 @@ pub struct Config {
     /// ライブ変換
     #[serde(default = "default_live_conversion")]
     pub live_conversion: bool,
+
+    /// サジェスト（Composition 中の候補ポップアップ表示）
+    #[serde(default = "default_suggest")]
+    pub suggest: bool,
 }
 
 fn default_romkan() -> String {
@@ -76,6 +80,10 @@ fn find_default_dicts() -> Vec<DictConfig> {
 }
 
 fn default_live_conversion() -> bool {
+    false
+}
+
+fn default_suggest() -> bool {
     false
 }
 

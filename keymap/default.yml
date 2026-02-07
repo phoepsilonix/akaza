@@ -48,10 +48,10 @@ keys:
   - states: [Conversion, Composition]
     key: [Escape]
     command: escape
-  - states: [Conversion]
+  - states: [Composition, Conversion]
     key: [Up, KP_Up]
     command: cursor_up
-  - states: [Conversion]
+  - states: [Composition, Conversion]
     key: [Down, KP_Down]
     command: cursor_down
   - states: [Conversion]
@@ -60,7 +60,7 @@ keys:
   - states: [Conversion]
     key: [Left, KP_Left]
     command: cursor_left
-  - states: [Conversion]
+  - states: [Composition, Conversion]
     key: [Tab]
     command: cycle_segmentation
   - states: [Conversion]
