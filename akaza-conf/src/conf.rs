@@ -64,7 +64,6 @@ fn connect_activate(app: &Application, config: Arc<Mutex<Config>>) -> Result<()>
             keymap: config.keymap.to_string(),
             romkan: config.romkan.to_string(),
             live_conversion: config.live_conversion,
-            suggest: config.suggest,
             engine: EngineConfig {
                 model: config.engine.model.to_string(),
                 dicts: config.engine.dicts.clone(),

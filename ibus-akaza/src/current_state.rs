@@ -48,8 +48,6 @@ pub struct CurrentState {
     pub(crate) force_selected_clause: Vec<Range<usize>>,
     /// ライブコンバージョン
     pub live_conversion: bool,
-    /// サジェストモードの有効/無効
-    pub suggest: bool,
     /// サジェストによる自動変換中かどうか（Space で明示的に変換した場合は false）
     pub(crate) suggest_active: bool,
     /// サジェスト中に Tab/Up/Down で候補を選択したかどうか
@@ -89,7 +87,6 @@ impl CurrentState {
     pub fn new(
         input_mode: InputMode,
         live_conversion: bool,
-        suggest: bool,
         romkan: RomKanConverter,
         engine: BigramWordViterbiEngine<
             MarisaSystemUnigramLM,
@@ -107,7 +104,6 @@ impl CurrentState {
             node_selected: HashMap::new(),
             force_selected_clause: Vec::new(),
             live_conversion,
-            suggest,
             suggest_active: false,
             suggest_candidate_selected: false,
             lookup_table_visible: false,
@@ -123,7 +119,7 @@ impl CurrentState {
     /// サジェスト表示すべきかどうかを判定する。
     /// ひらがな2文字以上入力されている場合に true を返す。
     fn should_suggest(&self) -> bool {
-        self.suggest && self.romkan.to_hiragana(&self.raw_input).chars().count() >= 2
+        self.romkan.to_hiragana(&self.raw_input).chars().count() >= 2
     }
 
     pub(crate) fn set_input_mode(&mut self, engine: *mut IBusEngine, input_mode: &InputMode) {
@@ -457,13 +453,10 @@ impl CurrentState {
             if let Err(e) = self.henkan(engine) {
                 error!("on_raw_input_change: suggest henkan failed: {}", e);
             }
-        } else if self.suggest && !self.clauses.is_empty() {
-            // サジェストモードだがまだ2文字未満: clauses をクリア
+        } else if !self.clauses.is_empty() {
+            // まだ2文字未満: clauses をクリア
             self.suggest_active = false;
             self.suggest_candidate_selected = false;
-            self.clauses.clear();
-            self.on_clauses_change(engine);
-        } else if !self.clauses.is_empty() {
             self.clauses.clear();
             self.on_clauses_change(engine);
         }
