@@ -50,6 +50,7 @@ pub fn evaluate(
     eucjp_dict: &Vec<String>,
     utf8_dict: &Vec<String>,
     model_dir: String,
+    k_best: usize,
 ) -> anyhow::Result<()> {
     let mut dicts: Vec<DictConfig> = Vec::new();
     for path in eucjp_dict {
@@ -78,6 +79,7 @@ pub fn evaluate(
     .build()?;
 
     let mut good_cnt = 0;
+    let mut topk_cnt = 0;
     let mut bad_cnt = 0;
 
     let force_ranges = Vec::new();
@@ -116,19 +118,33 @@ pub fn evaluate(
                 info!("{} => (teacher={}, akaza={})", yomi, surface, got);
                 good_cnt += 1;
             } else {
-                println!("[BAD] {} => corpus={}, akaza={}", yomi, surface, got);
+                // top-1 不一致 → k-best で正解を探す
+                let k_results = akaza.convert_k_best(yomi.as_str(), None, k_best)?;
+                let in_topk = k_results.iter().any(|path| {
+                    let s: String = path.iter().map(|seg| seg[0].surface.clone()).collect();
+                    s == surface
+                });
+
+                if in_topk {
+                    println!(
+                        "[TOP-{}] {} => corpus={}, akaza={}",
+                        k_best, yomi, surface, got
+                    );
+                    topk_cnt += 1;
+                } else {
+                    println!("[BAD] {} => corpus={}, akaza={}", yomi, surface, got);
+                    bad_cnt += 1;
+                }
+
                 println!(
-                    "Good count={} bad count={} elapsed={}ms saigen={}",
+                    "Good={} Top-{}={} Bad={} elapsed={}ms saigen={}",
                     good_cnt,
+                    k_best,
+                    topk_cnt,
                     bad_cnt,
                     elapsed.as_millis(),
                     saigen_ritsu.rate()
                 );
-
-                // 遅いなと思ったら cargo run --release になってるか確認すべし
-                // https://codom.hatenablog.com/entry/2017/06/03/221318
-
-                bad_cnt += 1;
             }
         }
     }
@@ -137,8 +153,10 @@ pub fn evaluate(
     let total_elapsed = total_t2.duration_since(total_t1)?;
 
     info!(
-        "Good count={} bad count={}, elapsed={}ms, 再現率={}",
+        "Good={}, Top-{}={}, Bad={}, elapsed={}ms, 再現率={}",
         good_cnt,
+        k_best,
+        topk_cnt,
         bad_cnt,
         total_elapsed.as_millis(),
         saigen_ritsu.rate(),
