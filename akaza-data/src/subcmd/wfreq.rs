@@ -29,7 +29,7 @@ pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
     let merged: FxHashMap<String, u32> = file_list
         .par_iter()
         .fold(
-            || FxHashMap::default(),
+            FxHashMap::default,
             |mut acc: FxHashMap<String, u32>, path_buf| {
                 info!("Processing {} for wfreq", path_buf.to_string_lossy());
                 let file = match File::open(path_buf) {
@@ -62,15 +62,12 @@ pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
                 acc
             },
         )
-        .reduce(
-            || FxHashMap::default(),
-            |mut a, b| {
-                for (word, cnt) in b {
-                    *a.entry(word).or_insert(0) += cnt;
-                }
-                a
-            },
-        );
+        .reduce(FxHashMap::default, |mut a, b| {
+            for (word, cnt) in b {
+                *a.entry(word).or_insert(0) += cnt;
+            }
+            a
+        });
 
     // 最終結果ファイルは順番が安定な方がよいので BTreeMap を採用。
     info!("Merging into sorted map");
