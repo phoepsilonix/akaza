@@ -126,7 +126,10 @@ pub fn evaluate(
                 });
 
                 if in_topk {
-                    println!("[TOP-{}] {} => corpus={}, akaza={}", k_best, yomi, surface, got);
+                    println!(
+                        "[TOP-{}] {} => corpus={}, akaza={}",
+                        k_best, yomi, surface, got
+                    );
                     topk_cnt += 1;
                 } else {
                     println!("[BAD] {} => corpus={}, akaza={}", yomi, surface, got);
