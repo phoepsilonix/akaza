@@ -324,9 +324,13 @@ fn main() -> anyhow::Result<()> {
             num_candidates: opt.candidates,
             k_best: opt.k_best,
         }),
-        Commands::Evaluate(opt) => {
-            evaluate(&opt.corpus, &opt.eucjp_dict, &opt.utf8_dict, opt.model_dir, opt.k_best)
-        }
+        Commands::Evaluate(opt) => evaluate(
+            &opt.corpus,
+            &opt.eucjp_dict,
+            &opt.utf8_dict,
+            opt.model_dir,
+            opt.k_best,
+        ),
         Commands::Bench(opt) => bench(BenchOptions {
             corpus: &opt.corpus,
             eucjp_dict: &opt.eucjp_dict,
