@@ -4,7 +4,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
-use log::{info, trace, warn};
+use log::{info, warn};
 use rayon::prelude::*;
 use regex::Regex;
 
@@ -25,31 +25,27 @@ pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
     let results = file_list
         .par_iter()
         .map(|path_buf| -> anyhow::Result<HashMap<String, u32>> {
-            // ファイルを読み込んで、HashSet に単語数を数え上げる。
+            // ファイルを読み込んで、HashMap に単語数を数え上げる。
             info!("Processing {} for wfreq", path_buf.to_string_lossy());
             let file = File::open(path_buf)?;
             let mut stats: HashMap<String, u32> = HashMap::new();
             for line in BufReader::new(file).lines() {
                 let line = line?;
                 let line = line.trim();
-                let words = line.split(' ').collect::<Vec<_>>();
-                for word in words {
-                    if word.is_empty() {
+                for word in line.split(' ') {
+                    if word.is_empty() || word.as_bytes()[0] == b'/' || word.as_bytes()[0] == b' ' {
                         continue;
                     }
                     if word.contains('\u{200f}') {
                         warn!("The document contains RTL character");
                         continue;
                     }
-                    if word.starts_with('/') {
-                        trace!("Invalid word: {}", word);
-                        continue;
+                    match stats.get_mut(word) {
+                        Some(cnt) => *cnt += 1,
+                        None => {
+                            stats.insert(word.to_string(), 1);
+                        }
                     }
-                    if word.starts_with(' ') {
-                        trace!("Invalid word: {}", word);
-                        continue;
-                    }
-                    *stats.entry(word.to_string()).or_insert(0) += 1;
                 }
             }
             Ok(stats)
@@ -60,10 +56,9 @@ pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
     info!("Merging");
     let mut retval: BTreeMap<String, u32> = BTreeMap::new();
     for result in results {
-        // このへんでマージを行う。
         let result = result?;
         for (word, cnt) in result {
-            *retval.entry(word.to_string()).or_insert(0) += cnt;
+            *retval.entry(word).or_insert(0) += cnt;
         }
     }
 
