@@ -23,44 +23,57 @@ pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
         }
     }
 
-    let results = file_list
+    // fold + reduce で逐次マージし、メモリ使用量をスレッド数分に抑える。
+    // 従来は全ファイル分の HashMap を collect してからマージしていたため、
+    // 大規模コーパスで OOM が発生していた。
+    let merged: FxHashMap<String, u32> = file_list
         .par_iter()
-        .map(|path_buf| -> anyhow::Result<FxHashMap<String, u32>> {
-            // ファイルを読み込んで、HashMap に単語数を数え上げる。
-            info!("Processing {} for wfreq", path_buf.to_string_lossy());
-            let file = File::open(path_buf)?;
-            let mut stats: FxHashMap<String, u32> = FxHashMap::default();
-            for line in BufReader::new(file).lines() {
-                let line = line?;
-                let line = line.trim();
-                for word in line.split(' ') {
-                    if word.is_empty() || word.as_bytes()[0] == b'/' || word.as_bytes()[0] == b' ' {
-                        continue;
+        .fold(
+            FxHashMap::default,
+            |mut acc: FxHashMap<String, u32>, path_buf| {
+                info!("Processing {} for wfreq", path_buf.to_string_lossy());
+                let file = match File::open(path_buf) {
+                    Ok(f) => f,
+                    Err(e) => {
+                        warn!("Failed to open {}: {}", path_buf.to_string_lossy(), e);
+                        return acc;
                     }
-                    if word.contains('\u{200f}') {
-                        warn!("The document contains RTL character");
-                        continue;
-                    }
-                    match stats.get_mut(word) {
-                        Some(cnt) => *cnt += 1,
-                        None => {
-                            stats.insert(word.to_string(), 1);
+                };
+                for line in BufReader::new(file).lines() {
+                    let line = match line {
+                        Ok(l) => l,
+                        Err(_) => continue,
+                    };
+                    let line = line.trim();
+                    for word in line.split(' ') {
+                        if word.is_empty()
+                            || word.as_bytes()[0] == b'/'
+                            || word.as_bytes()[0] == b' '
+                        {
+                            continue;
                         }
+                        if word.contains('\u{200f}') {
+                            warn!("The document contains RTL character");
+                            continue;
+                        }
+                        *acc.entry(word.to_string()).or_insert(0) += 1;
                     }
                 }
+                acc
+            },
+        )
+        .reduce(FxHashMap::default, |mut a, b| {
+            for (word, cnt) in b {
+                *a.entry(word).or_insert(0) += cnt;
             }
-            Ok(stats)
-        })
-        .collect::<Vec<_>>();
+            a
+        });
 
     // 最終結果ファイルは順番が安定な方がよいので BTreeMap を採用。
-    info!("Merging");
+    info!("Merging into sorted map");
     let mut retval: BTreeMap<String, u32> = BTreeMap::new();
-    for result in results {
-        let result = result?;
-        for (word, cnt) in result {
-            *retval.entry(word).or_insert(0) += cnt;
-        }
+    for (word, cnt) in merged {
+        *retval.entry(word).or_insert(0) += cnt;
     }
 
     // 結果をファイルに書いていく
