@@ -211,17 +211,12 @@ impl UserData {
     }
 
     pub fn get_unigram_cost(&self, node: &WordNode) -> Option<f32> {
-        self.unigram_user_stats.get_cost(&node.cached_key)
+        self.unigram_user_stats.get_cost(&node.key())
     }
 
-    pub fn get_bigram_cost(
-        &self,
-        node1: &WordNode,
-        node2: &WordNode,
-        buf: &mut String,
-    ) -> Option<f32> {
+    pub fn get_bigram_cost(&self, node1: &WordNode, node2: &WordNode) -> Option<f32> {
         self.bigram_user_stats
-            .get_cost(&node1.cached_key, &node2.cached_key, buf)
+            .get_cost(node1.key().as_str(), node2.key().as_str())
     }
 }
 

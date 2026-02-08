@@ -14,8 +14,6 @@ pub struct WordNode {
     pub cost: f32,
     pub word_id_and_score: Option<(i32, f32)>,
     pub auto_generated: bool,
-    /// "surface/yomi" のキャッシュ
-    pub cached_key: String,
 }
 
 impl Hash for WordNode {
@@ -39,15 +37,11 @@ impl PartialEq<Self> for WordNode {
 impl Eq for WordNode {}
 
 impl WordNode {
-    pub fn key(&self) -> &str {
-        &self.cached_key
-    }
-
-    fn make_key(surface: &str, yomi: &str) -> String {
-        let mut buf = String::with_capacity(surface.len() + 1 + yomi.len());
-        buf.push_str(surface);
-        buf.push('/');
-        buf.push_str(yomi);
+    pub fn key(&self) -> String {
+        let mut buf = String::new();
+        buf += self.surface.as_str();
+        buf += "/";
+        buf += self.yomi.as_str();
         buf
     }
 
@@ -59,7 +53,6 @@ impl WordNode {
             cost: 0_f32,
             word_id_and_score: None,
             auto_generated: true,
-            cached_key: BOS_TOKEN_KEY.to_string(),
         }
     }
     pub(crate) fn create_eos(start_pos: i32) -> WordNode {
@@ -70,7 +63,6 @@ impl WordNode {
             cost: 0_f32,
             word_id_and_score: None,
             auto_generated: true,
-            cached_key: EOS_TOKEN_KEY.to_string(),
         }
     }
     pub fn new(
@@ -87,7 +79,6 @@ impl WordNode {
 
         WordNode {
             start_pos,
-            cached_key: Self::make_key(surface, yomi),
             surface: surface.to_string(),
             yomi: yomi.to_string(),
             cost: 0_f32,
@@ -99,6 +90,6 @@ impl WordNode {
 
 impl Display for WordNode {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.cached_key)
+        write!(f, "{}/{}", self.surface, self.yomi)
     }
 }
