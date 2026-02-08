@@ -51,6 +51,9 @@ impl GraphResolver {
         // user_data のロックを一度だけ取得し、ループ中は保持する
         let user_data = lattice.lock_user_data();
 
+        // bigram バッファをループ前に一度だけ確保
+        let mut bigram_buf = String::new();
+
         // 前向きに動的計画法でたどる
         for i in 1..yomi.len() + 2 {
             let Some(nodes) = &lattice.node_list(i as i32) else {
@@ -70,7 +73,12 @@ impl GraphResolver {
                 // 各前ノードの k-best エントリそれぞれについて候補を生成
                 let mut entries: Vec<KBestEntry> = Vec::new();
                 for prev in prev_nodes {
-                    let edge_cost = lattice.get_edge_cost_with_user_data(prev, node, &user_data);
+                    let edge_cost = lattice.get_edge_cost_with_user_data(
+                        prev,
+                        node,
+                        &user_data,
+                        &mut bigram_buf,
+                    );
 
                     if let Some(prev_entries) = kbest_map.get(prev) {
                         for (rank, prev_entry) in prev_entries.iter().enumerate() {
