@@ -101,7 +101,31 @@ pub fn evaluate(
                 .with_context(|| format!("source: {line}"))
                 .unwrap();
             let yomi = yomi.replace('|', "");
+            // ibus-akaza では数字は半角で入力されるため、
+            // 全角数字を半角に正規化して同じ条件で評価する。
+            let yomi = yomi
+                .replace('０', "0")
+                .replace('１', "1")
+                .replace('２', "2")
+                .replace('３', "3")
+                .replace('４', "4")
+                .replace('５', "5")
+                .replace('６', "6")
+                .replace('７', "7")
+                .replace('８', "8")
+                .replace('９', "9");
             let surface = surface.replace('|', "");
+            let surface = surface
+                .replace('０', "0")
+                .replace('１', "1")
+                .replace('２', "2")
+                .replace('３', "3")
+                .replace('４', "4")
+                .replace('５', "5")
+                .replace('６', "6")
+                .replace('７', "7")
+                .replace('８', "8")
+                .replace('９', "9");
 
             let t1 = SystemTime::now();
             let result = akaza.convert(yomi.as_str(), Some(&force_ranges))?;
