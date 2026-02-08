@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::fs::File;
 use std::io::{prelude::*, BufReader};
 use std::path::{Path, PathBuf};
@@ -9,6 +8,7 @@ use anyhow::Result;
 use chrono::Local;
 use log::info;
 use rayon::prelude::*;
+use rustc_hash::FxHashMap;
 
 use libakaza::lm::base::{SystemBigramLM, SystemUnigramLM};
 
@@ -34,11 +34,11 @@ pub fn make_stats_system_bigram_lm(
         .as_hash_map()
         .iter()
         .map(|(key, (word_id, _))| (key.clone(), *word_id))
-        .collect::<HashMap<_, _>>();
+        .collect::<FxHashMap<_, _>>();
     let reverse_unigram_map = unigram_map
         .iter()
         .map(|(key, word_id)| (*word_id, key.to_string()))
-        .collect::<HashMap<_, _>>();
+        .collect::<FxHashMap<_, _>>();
 
     // 次に、コーパスをスキャンして bigram を読み取る。
     let mut file_list: Vec<PathBuf> = Vec::new();
@@ -55,7 +55,7 @@ pub fn make_stats_system_bigram_lm(
 
     // 集計した結果をマージする
     info!("Merging");
-    let mut merged: HashMap<(i32, i32), u32> = HashMap::new();
+    let mut merged: FxHashMap<(i32, i32), u32> = FxHashMap::default();
     for result in results {
         let result = result?;
         for (word_ids, cnt) in result {
@@ -68,7 +68,7 @@ pub fn make_stats_system_bigram_lm(
         .iter()
         .filter(|(_, cnt)| **cnt > threshold)
         .map(|((id1, id2), cnt)| ((*id1, *id2), *cnt))
-        .collect::<HashMap<(i32, i32), u32>>();
+        .collect::<FxHashMap<(i32, i32), u32>>();
 
     // dump bigram text file.
     let dumpfname = format!(
@@ -106,11 +106,11 @@ pub fn make_stats_system_bigram_lm(
 
 fn count_bigram(
     src: &PathBuf,
-    unigram_lm: &HashMap<String, i32>,
-) -> Result<HashMap<(i32, i32), u32>> {
+    unigram_lm: &FxHashMap<String, i32>,
+) -> Result<FxHashMap<(i32, i32), u32>> {
     info!("Counting {}", src.to_string_lossy());
     let file = File::open(src)?;
-    let mut map: HashMap<(i32, i32), u32> = HashMap::new();
+    let mut map: FxHashMap<(i32, i32), u32> = FxHashMap::default();
 
     let bos_id = unigram_lm.get("__BOS__/__BOS__");
     let eos_id = unigram_lm.get("__EOS__/__EOS__");
