@@ -32,9 +32,65 @@ impl SaigenRitsu {
         self.total_sys += my_candidate.len();
     }
 
+    fn merge(&mut self, other: &SaigenRitsu) {
+        self.total_lcs += other.total_lcs;
+        self.total_sys += other.total_sys;
+    }
+
     fn rate(&self) -> f32 {
         100.0 * (self.total_lcs as f32) / (self.total_sys as f32)
     }
+}
+
+/// 全角数字を半角に正規化する
+fn normalize_fullwidth_numbers(s: &str) -> String {
+    s.replace('０', "0")
+        .replace('１', "1")
+        .replace('２', "2")
+        .replace('３', "3")
+        .replace('４', "4")
+        .replace('５', "5")
+        .replace('６', "6")
+        .replace('７', "7")
+        .replace('８', "8")
+        .replace('９', "9")
+}
+
+/// コーパスファイルをパースして (yomi, surface) のペアを返す
+fn parse_corpus_file(path: &str) -> anyhow::Result<Vec<(String, String)>> {
+    let fp = File::open(path).with_context(|| format!("File: {path}"))?;
+    let mut lines = Vec::new();
+    for line in BufReader::new(fp).lines() {
+        let line = line?;
+        let line = line.trim().to_string();
+        if line.starts_with('#') || line.is_empty() {
+            continue;
+        }
+
+        let (yomi, surface) = line
+            .split_once(' ')
+            .with_context(|| format!("source: {line}"))
+            .unwrap();
+        let yomi = normalize_fullwidth_numbers(&yomi.replace('|', ""));
+        let surface = normalize_fullwidth_numbers(&surface.replace('|', ""));
+        lines.push((yomi, surface));
+    }
+    Ok(lines)
+}
+
+struct MismatchEntry {
+    yomi: String,
+    surface: String,
+    got: String,
+    in_topk: bool,
+}
+
+struct EvalResult {
+    good_cnt: usize,
+    topk_cnt: usize,
+    bad_cnt: usize,
+    saigen_ritsu: SaigenRitsu,
+    mismatches: Vec<MismatchEntry>,
 }
 
 /// モデル/変換アルゴリズムを評価する。
@@ -71,104 +127,110 @@ pub fn evaluate(
         })
     }
 
-    let akaza = BigramWordViterbiEngineBuilder::new(EngineConfig {
+    let config = EngineConfig {
         dicts,
         model: model_dir,
         dict_cache: false,
-    })
-    .build()?;
+    };
 
+    // コーパスの全行を事前に読み込む
+    let mut lines: Vec<(String, String)> = Vec::new();
+    for file in corpus {
+        lines.extend(parse_corpus_file(file)?);
+    }
+
+    let total_t1 = SystemTime::now();
+
+    let num_threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    let chunk_size = lines.len().div_ceil(num_threads);
+
+    let results: Vec<anyhow::Result<EvalResult>> = std::thread::scope(|s| {
+        let handles: Vec<_> = lines
+            .chunks(chunk_size)
+            .map(|chunk| {
+                let config = config.clone();
+                s.spawn(move || {
+                    let engine = BigramWordViterbiEngineBuilder::new(config).build()?;
+                    let force_ranges = Vec::new();
+
+                    let mut good_cnt = 0;
+                    let mut topk_cnt = 0;
+                    let mut bad_cnt = 0;
+                    let mut saigen_ritsu = SaigenRitsu::default();
+                    let mut mismatches = Vec::new();
+
+                    for (yomi, surface) in chunk {
+                        let result = engine.convert(yomi.as_str(), Some(&force_ranges))?;
+
+                        let terms: Vec<String> =
+                            result.iter().map(|f| f[0].surface.clone()).collect();
+                        let got = terms.join("");
+
+                        saigen_ritsu.add(surface, &got);
+
+                        if *surface == got {
+                            info!("{} => (teacher={}, akaza={})", yomi, surface, got);
+                            good_cnt += 1;
+                        } else {
+                            let k_results = engine.convert_k_best(yomi.as_str(), None, k_best)?;
+                            let in_topk = k_results.iter().any(|path| {
+                                let s: String =
+                                    path.iter().map(|seg| seg[0].surface.clone()).collect();
+                                s == *surface
+                            });
+
+                            if in_topk {
+                                topk_cnt += 1;
+                            } else {
+                                bad_cnt += 1;
+                            }
+
+                            mismatches.push(MismatchEntry {
+                                yomi: yomi.clone(),
+                                surface: surface.clone(),
+                                got,
+                                in_topk,
+                            });
+                        }
+                    }
+
+                    Ok(EvalResult {
+                        good_cnt,
+                        topk_cnt,
+                        bad_cnt,
+                        saigen_ritsu,
+                        mismatches,
+                    })
+                })
+            })
+            .collect();
+
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+
+    // 結果を集約
     let mut good_cnt = 0;
     let mut topk_cnt = 0;
     let mut bad_cnt = 0;
-
-    let force_ranges = Vec::new();
-    let total_t1 = SystemTime::now();
-
     let mut saigen_ritsu = SaigenRitsu::default();
 
-    for file in corpus {
-        let fp = File::open(file).with_context(|| format!("File: {file}"))?;
-        for line in BufReader::new(fp).lines() {
-            let line = line?;
-            let line = line.trim();
-            if line.starts_with('#') {
-                continue; // comment行
-            }
+    for result in results {
+        let result = result?;
+        good_cnt += result.good_cnt;
+        topk_cnt += result.topk_cnt;
+        bad_cnt += result.bad_cnt;
+        saigen_ritsu.merge(&result.saigen_ritsu);
 
-            let (yomi, surface) = line
-                .split_once(' ')
-                .with_context(|| format!("source: {line}"))
-                .unwrap();
-            let yomi = yomi.replace('|', "");
-            // ibus-akaza では数字は半角で入力されるため、
-            // 全角数字を半角に正規化して同じ条件で評価する。
-            let yomi = yomi
-                .replace('０', "0")
-                .replace('１', "1")
-                .replace('２', "2")
-                .replace('３', "3")
-                .replace('４', "4")
-                .replace('５', "5")
-                .replace('６', "6")
-                .replace('７', "7")
-                .replace('８', "8")
-                .replace('９', "9");
-            let surface = surface.replace('|', "");
-            let surface = surface
-                .replace('０', "0")
-                .replace('１', "1")
-                .replace('２', "2")
-                .replace('３', "3")
-                .replace('４', "4")
-                .replace('５', "5")
-                .replace('６', "6")
-                .replace('７', "7")
-                .replace('８', "8")
-                .replace('９', "9");
-
-            let t1 = SystemTime::now();
-            let result = akaza.convert(yomi.as_str(), Some(&force_ranges))?;
-            let t2 = SystemTime::now();
-            let elapsed = t2.duration_since(t1)?;
-
-            let terms: Vec<String> = result.iter().map(|f| f[0].surface.clone()).collect();
-            let got = terms.join("");
-
-            // 最長共通部分列を算出。
-            saigen_ritsu.add(&surface, &got);
-
-            if surface == got {
-                info!("{} => (teacher={}, akaza={})", yomi, surface, got);
-                good_cnt += 1;
-            } else {
-                // top-1 不一致 → k-best で正解を探す
-                let k_results = akaza.convert_k_best(yomi.as_str(), None, k_best)?;
-                let in_topk = k_results.iter().any(|path| {
-                    let s: String = path.iter().map(|seg| seg[0].surface.clone()).collect();
-                    s == surface
-                });
-
-                if in_topk {
-                    println!(
-                        "[TOP-{}] {} => corpus={}, akaza={}",
-                        k_best, yomi, surface, got
-                    );
-                    topk_cnt += 1;
-                } else {
-                    println!("[BAD] {} => corpus={}, akaza={}", yomi, surface, got);
-                    bad_cnt += 1;
-                }
-
+        for m in &result.mismatches {
+            if m.in_topk {
                 println!(
-                    "Good={} Top-{}={} Bad={} elapsed={}ms saigen={}",
-                    good_cnt,
-                    k_best,
-                    topk_cnt,
-                    bad_cnt,
-                    elapsed.as_millis(),
-                    saigen_ritsu.rate()
+                    "[TOP-{}] {} => corpus={}, akaza={}",
+                    k_best, m.yomi, m.surface, m.got
                 );
+            } else {
+                println!("[BAD] {} => corpus={}, akaza={}", m.yomi, m.surface, m.got);
             }
         }
     }
