@@ -28,39 +28,46 @@ pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
     let tmp_db = tempfile::NamedTempFile::new()?;
     let db = Database::create(tmp_db.path())?;
 
-    // ファイルごとに読み込み、バッチ単位でディスク上の KV に書き込む。
-    // redb は single writer なので逐次処理。I/O バウンドのため問題ない。
-    for (i, path_buf) in file_list.iter().enumerate() {
+    // 複数ファイルをまとめて 1 トランザクションで commit することで、
+    // トランザクションオーバーヘッドを削減する。
+    const BATCH_SIZE: usize = 100;
+    for (batch_idx, chunk) in file_list.chunks(BATCH_SIZE).enumerate() {
+        let batch_start = batch_idx * BATCH_SIZE + 1;
+        let batch_end = (batch_start + chunk.len() - 1).min(file_list.len());
         info!(
-            "[{}/{}] Processing {} for wfreq",
-            i + 1,
+            "Processing batch {}-{}/{} ({} files)",
+            batch_start,
+            batch_end,
             file_list.len(),
-            path_buf.to_string_lossy()
+            chunk.len()
         );
-        let file = File::open(path_buf)?;
 
-        // ファイル単位でメモリ上に集計し、まとめて DB に書き込む
-        let mut local: rustc_hash::FxHashMap<String, u32> = rustc_hash::FxHashMap::default();
-        for line in BufReader::new(file).lines() {
-            let line = line?;
-            let line = line.trim();
-            for word in line.split(' ') {
-                if word.is_empty() || word.as_bytes()[0] == b'/' || word.as_bytes()[0] == b' ' {
-                    continue;
+        // バッチ内の全ファイルをメモリ上で集計
+        let mut batch_stats: rustc_hash::FxHashMap<String, u32> = rustc_hash::FxHashMap::default();
+        for path_buf in chunk {
+            info!("  Processing {}", path_buf.to_string_lossy());
+            let file = File::open(path_buf)?;
+            for line in BufReader::new(file).lines() {
+                let line = line?;
+                let line = line.trim();
+                for word in line.split(' ') {
+                    if word.is_empty() || word.as_bytes()[0] == b'/' || word.as_bytes()[0] == b' ' {
+                        continue;
+                    }
+                    if word.contains('\u{200f}') {
+                        warn!("The document contains RTL character");
+                        continue;
+                    }
+                    *batch_stats.entry(word.to_string()).or_insert(0) += 1;
                 }
-                if word.contains('\u{200f}') {
-                    warn!("The document contains RTL character");
-                    continue;
-                }
-                *local.entry(word.to_string()).or_insert(0) += 1;
             }
         }
 
-        // ファイル分をまとめて DB にマージ
+        // バッチ分をまとめて 1 トランザクションで DB にマージ
         let write_txn = db.begin_write()?;
         {
             let mut table = write_txn.open_table(WFREQ_TABLE)?;
-            for (word, cnt) in &local {
+            for (word, cnt) in &batch_stats {
                 let prev = table.get(word.as_str())?.map(|v| v.value()).unwrap_or(0);
                 table.insert(word.as_str(), prev + cnt)?;
             }
