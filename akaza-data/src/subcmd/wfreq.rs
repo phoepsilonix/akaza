@@ -1,17 +1,18 @@
-use std::collections::BTreeMap;
 use std::fs;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 
 use log::{info, warn};
-use rayon::prelude::*;
+use redb::{Database, ReadableTable, TableDefinition};
 use regex::Regex;
-use rustc_hash::FxHashMap;
 
 use crate::utils::get_file_list;
 
+const WFREQ_TABLE: TableDefinition<&str, u32> = TableDefinition::new("wfreq");
+
 /// 単語の発生確率を数え上げる。
+/// redb をオンディスク KV として使用し、大規模コーパスでも OOM しない。
 pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
     info!("wfreq: {:?} => {}", src_dirs, dst_file);
 
@@ -23,57 +24,48 @@ pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
         }
     }
 
-    // fold + reduce で逐次マージし、メモリ使用量をスレッド数分に抑える。
-    // 従来は全ファイル分の HashMap を collect してからマージしていたため、
-    // 大規模コーパスで OOM が発生していた。
-    let merged: FxHashMap<String, u32> = file_list
-        .par_iter()
-        .fold(
-            FxHashMap::default,
-            |mut acc: FxHashMap<String, u32>, path_buf| {
-                info!("Processing {} for wfreq", path_buf.to_string_lossy());
-                let file = match File::open(path_buf) {
-                    Ok(f) => f,
-                    Err(e) => {
-                        warn!("Failed to open {}: {}", path_buf.to_string_lossy(), e);
-                        return acc;
-                    }
-                };
-                for line in BufReader::new(file).lines() {
-                    let line = match line {
-                        Ok(l) => l,
-                        Err(_) => continue,
-                    };
-                    let line = line.trim();
-                    for word in line.split(' ') {
-                        if word.is_empty()
-                            || word.as_bytes()[0] == b'/'
-                            || word.as_bytes()[0] == b' '
-                        {
-                            continue;
-                        }
-                        if word.contains('\u{200f}') {
-                            warn!("The document contains RTL character");
-                            continue;
-                        }
-                        *acc.entry(word.to_string()).or_insert(0) += 1;
-                    }
-                }
-                acc
-            },
-        )
-        .reduce(FxHashMap::default, |mut a, b| {
-            for (word, cnt) in b {
-                *a.entry(word).or_insert(0) += cnt;
-            }
-            a
-        });
+    // 一時ファイルに redb データベースを作成
+    let tmp_db = tempfile::NamedTempFile::new()?;
+    let db = Database::create(tmp_db.path())?;
 
-    // 最終結果ファイルは順番が安定な方がよいので BTreeMap を採用。
-    info!("Merging into sorted map");
-    let mut retval: BTreeMap<String, u32> = BTreeMap::new();
-    for (word, cnt) in merged {
-        *retval.entry(word).or_insert(0) += cnt;
+    // ファイルごとに読み込み、バッチ単位でディスク上の KV に書き込む。
+    // redb は single writer なので逐次処理。I/O バウンドのため問題ない。
+    for (i, path_buf) in file_list.iter().enumerate() {
+        info!(
+            "[{}/{}] Processing {} for wfreq",
+            i + 1,
+            file_list.len(),
+            path_buf.to_string_lossy()
+        );
+        let file = File::open(path_buf)?;
+
+        // ファイル単位でメモリ上に集計し、まとめて DB に書き込む
+        let mut local: rustc_hash::FxHashMap<String, u32> = rustc_hash::FxHashMap::default();
+        for line in BufReader::new(file).lines() {
+            let line = line?;
+            let line = line.trim();
+            for word in line.split(' ') {
+                if word.is_empty() || word.as_bytes()[0] == b'/' || word.as_bytes()[0] == b' ' {
+                    continue;
+                }
+                if word.contains('\u{200f}') {
+                    warn!("The document contains RTL character");
+                    continue;
+                }
+                *local.entry(word.to_string()).or_insert(0) += 1;
+            }
+        }
+
+        // ファイル分をまとめて DB にマージ
+        let write_txn = db.begin_write()?;
+        {
+            let mut table = write_txn.open_table(WFREQ_TABLE)?;
+            for (word, cnt) in &local {
+                let prev = table.get(word.as_str())?.map(|v| v.value()).unwrap_or(0);
+                table.insert(word.as_str(), prev + cnt)?;
+            }
+        }
+        write_txn.commit()?;
     }
 
     // 結果をファイルに書いていく
@@ -82,16 +74,24 @@ pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
     // カタカナ二文字系は全般的にノイズになりがちだが、Wikipedia/青空文庫においては
     // 架空の人物や実在の人物の名前として使われがちなので、消す。
     let re = Regex::new("^[\u{30A0}-\u{30FF}]{2}/[\u{3040}-\u{309F}]{2}$")?;
-    // let ignore_files = HashSet::from(["テル/てる", "ニナ/にな", "ガチ/がち"]);
     let mut ofp = File::create(dst_file.to_string() + ".tmp")?;
-    for (word, cnt) in retval {
-        if re.is_match(word.as_str()) {
+
+    let read_txn = db.begin_read()?;
+    let table = read_txn.open_table(WFREQ_TABLE)?;
+    // redb の BTree は key 順にイテレートされるのでソート不要
+    for entry in table.iter()? {
+        let entry = entry?;
+        let word = entry.0.value();
+        let cnt = entry.1.value();
+        if re.is_match(word) {
             info!("Skip 2 character katakana entry: {}", word);
             continue;
         }
         ofp.write_fmt(format_args!("{word}\t{cnt}\n"))?;
     }
+
     fs::rename(dst_file.to_owned() + ".tmp", dst_file)?;
 
+    // tmp_db は drop 時に自動削除される
     Ok(())
 }
