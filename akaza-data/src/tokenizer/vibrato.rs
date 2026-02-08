@@ -50,32 +50,28 @@ impl AkazaTokenizer for VibratoTokenizer {
         worker.reset_sentence(src);
         worker.tokenize();
 
-        let mut intermediates: Vec<IntermediateToken> = Vec::new();
+        let mut intermediates: Vec<IntermediateToken> = Vec::with_capacity(worker.num_tokens());
         let mut yomi_buf = String::new();
 
         // Vibrato/mecab の場合、接尾辞などが細かく分かれることは少ないが、
         // 一方で、助詞/助動詞などが細かくわかれがち。
         for i in 0..worker.num_tokens() {
             let token = worker.token(i);
-            let feature: Vec<&str> = token.feature().split(',').collect();
+            let feature = token.feature();
+            let mut parts = feature.split(',');
 
-            let hinshi = feature[0];
-            let subhinshi = if feature.len() > 2 { feature[1] } else { "UNK" };
-            let subsubhinshi = if feature.len() > 3 { feature[2] } else { "UNK" };
-            let yomi_raw = if feature.len() > 7 {
-                feature[7]
-            } else {
-                // 読みがな不明なもの。固有名詞など。
-                // サンデフィヨルド・フォトバル/名詞,固有名詞,組織,*,*,*,*
-                token.surface()
-            };
+            let hinshi = parts.next().unwrap_or("UNK");
+            let subhinshi = parts.next().unwrap_or("UNK");
+            let subsubhinshi = parts.next().unwrap_or("UNK");
+            // feature[3]..feature[6] をスキップ
+            let yomi_raw = parts.nth(4).unwrap_or(token.surface());
             kata2hira_into(yomi_raw, &mut yomi_buf);
-            let yomi = yomi_buf.clone();
             let surface = if should_be_kana(kana_preferred, hinshi, subhinshi) {
-                Cow::Owned(yomi.clone())
+                Cow::Owned(yomi_buf.clone())
             } else {
                 Cow::Owned(token.surface().to_string())
             };
+            let yomi = std::mem::take(&mut yomi_buf);
             let intermediate = IntermediateToken {
                 surface,
                 yomi: Cow::Owned(yomi),

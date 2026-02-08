@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::Path;
@@ -57,12 +58,12 @@ impl AozoraBunkoProcessor {
         self.kyukana_pattern.is_match(src)
     }
 
-    fn remove_yomigana(&self, src: &str) -> String {
-        self.yomigana_pattern.replace_all(src, "").to_string()
+    fn remove_yomigana<'a>(&self, src: &'a str) -> Cow<'a, str> {
+        self.yomigana_pattern.replace_all(src, "")
     }
 
-    fn remove_comment(&self, src: &str) -> String {
-        self.comment_pattern.replace_all(src, "").to_string()
+    fn remove_comment<'a>(&self, src: &'a str) -> Cow<'a, str> {
+        self.comment_pattern.replace_all(src, "")
     }
 
     fn strip_meta(&self, src: &str) -> String {
@@ -166,9 +167,10 @@ impl CorpusReader for AozoraBunkoProcessor {
                 continue;
             }
             let line = self.remove_yomigana(line);
-            let line = self.remove_comment(line.as_str());
+            let line = self.remove_comment(&line);
 
-            buf += (annotate(line.as_str()).with_context(|| line)? + "\n").as_str();
+            buf.push_str(&annotate(&line).with_context(|| line.into_owned())?);
+            buf.push('\n');
         }
 
         info!("Writing {}", ofname.to_string_lossy());
