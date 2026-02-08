@@ -9,7 +9,7 @@ use regex::Regex;
 
 use crate::graph::lattice_graph::LatticeGraph;
 use crate::graph::segmenter::SegmentationResult;
-use crate::graph::word_node::WordNode;
+use crate::graph::word_node::{WordNode, BOS_TOKEN_KEY, EOS_TOKEN_KEY};
 use crate::kana_kanji::base::KanaKanjiDict;
 use crate::lm::base::{SystemBigramLM, SystemUnigramLM};
 use crate::user_side_data::user_data::UserData;
@@ -45,11 +45,18 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
     pub fn construct(&self, yomi: &str, words_ends_at: &SegmentationResult) -> LatticeGraph<U, B> {
         // このグラフのインデクスは単語の終了位置。
         let mut graph: BTreeMap<i32, Vec<WordNode>> = BTreeMap::new();
-        graph.insert(0, vec![WordNode::create_bos()]);
-        graph.insert(
-            (yomi.len() + 1) as i32,
-            vec![WordNode::create_eos(yomi.len() as i32)],
-        );
+
+        let mut bos = WordNode::create_bos();
+        if let Some((word_id, _)) = self.system_unigram_lm.find(BOS_TOKEN_KEY) {
+            bos.word_id_and_score = Some((word_id, 0.0)); // score=0: ノードコストは0のまま
+        }
+        graph.insert(0, vec![bos]);
+
+        let mut eos = WordNode::create_eos(yomi.len() as i32);
+        if let Some((word_id, _)) = self.system_unigram_lm.find(EOS_TOKEN_KEY) {
+            eos.word_id_and_score = Some((word_id, 0.0));
+        }
+        graph.insert((yomi.len() + 1) as i32, vec![eos]);
 
         for (end_pos, segmented_yomis) in words_ends_at.iter() {
             for segmented_yomi in segmented_yomis {

@@ -14,6 +14,7 @@ use libakaza::dict::skk::read::read_skkdict;
 use libakaza::graph::graph_builder::GraphBuilder;
 use libakaza::graph::graph_resolver::GraphResolver;
 use libakaza::graph::segmenter::Segmenter;
+use libakaza::graph::word_node::{BOS_TOKEN_KEY, EOS_TOKEN_KEY};
 use libakaza::kana_kanji::hashmap_vec::HashmapVecKanaKanjiDict;
 use libakaza::kana_trie::cedarwood_kana_trie::CedarwoodKanaTrie;
 use libakaza::lm::base::{SystemBigramLM, SystemUnigramLM};
@@ -153,11 +154,9 @@ impl LearningService {
                     let key1 = teacher.nodes[i - 1].key();
                     let key2 = teacher.nodes[i].key();
                     let Some((word_id1, _)) = self.system_unigram_lm.find(key1.as_str()) else {
-                        // info!("{} is not registered in the real system unigram LM.",word1);
                         continue;
                     };
                     let Some((word_id2, _)) = self.system_unigram_lm.find(key2.as_str()) else {
-                        // info!("{} is not registered in the real system unigram LM.",word1);
                         continue;
                     };
                     let v = self
@@ -169,6 +168,40 @@ impl LearningService {
                         key1, word_id1, key2, word_id2, v
                     );
                     self.system_bigram_lm.update(word_id1, word_id2, v - delta);
+                }
+            }
+
+            // learn BOS/EOS bigram
+            if !teacher.nodes.is_empty() {
+                // BOS → 最初の単語
+                if let Some((bos_id, _)) = self.system_unigram_lm.find(BOS_TOKEN_KEY) {
+                    let first_key = teacher.nodes[0].key();
+                    if let Some((first_id, _)) = self.system_unigram_lm.find(first_key.as_str()) {
+                        let v = self
+                            .system_bigram_lm
+                            .get_edge_cnt(bos_id, first_id)
+                            .unwrap_or(0_u32);
+                        info!(
+                            "Update BOS bigram cost: BOS={},{}={}, v={}",
+                            bos_id, first_key, first_id, v
+                        );
+                        self.system_bigram_lm.update(bos_id, first_id, v - delta);
+                    }
+                }
+                // 最後の単語 → EOS
+                if let Some((eos_id, _)) = self.system_unigram_lm.find(EOS_TOKEN_KEY) {
+                    let last_key = teacher.nodes.last().unwrap().key();
+                    if let Some((last_id, _)) = self.system_unigram_lm.find(last_key.as_str()) {
+                        let v = self
+                            .system_bigram_lm
+                            .get_edge_cnt(last_id, eos_id)
+                            .unwrap_or(0_u32);
+                        info!(
+                            "Update EOS bigram cost: {}={}->EOS={}, v={}",
+                            last_key, last_id, eos_id, v
+                        );
+                        self.system_bigram_lm.update(last_id, eos_id, v - delta);
+                    }
                 }
             }
 
