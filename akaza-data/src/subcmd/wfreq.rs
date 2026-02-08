@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fs;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 use log::{info, warn};
 use rayon::prelude::*;
 use regex::Regex;
+use rustc_hash::FxHashMap;
 
 use crate::utils::get_file_list;
 
@@ -24,11 +25,11 @@ pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
 
     let results = file_list
         .par_iter()
-        .map(|path_buf| -> anyhow::Result<HashMap<String, u32>> {
+        .map(|path_buf| -> anyhow::Result<FxHashMap<String, u32>> {
             // ファイルを読み込んで、HashMap に単語数を数え上げる。
             info!("Processing {} for wfreq", path_buf.to_string_lossy());
             let file = File::open(path_buf)?;
-            let mut stats: HashMap<String, u32> = HashMap::new();
+            let mut stats: FxHashMap<String, u32> = FxHashMap::default();
             for line in BufReader::new(file).lines() {
                 let line = line?;
                 let line = line.trim();
