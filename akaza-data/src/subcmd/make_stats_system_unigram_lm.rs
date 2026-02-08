@@ -11,7 +11,9 @@ pub fn make_stats_system_unigram_lm(srcpath: &str, dstpath: &str) -> anyhow::Res
     // 16 はヒューリスティックな値。調整の余地。
     let threshold = 16_u32;
 
-    let wordcnt = parse_wfreq(srcpath, threshold)?;
+    let mut wordcnt = parse_wfreq(srcpath, threshold)?;
+    wordcnt.insert("__BOS__/__BOS__".to_string(), 0);
+    wordcnt.insert("__EOS__/__EOS__".to_string(), 0);
     if wordcnt.len() >= 8388608 {
         // edge cost 言語モデルファイルの容量を小さく保つために
         // 3 byte に ID が収めるようにする。
