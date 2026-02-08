@@ -38,9 +38,19 @@ fn parse_wfreq(src_file: &str, threshold: u32) -> anyhow::Result<HashMap<String,
     let mut map: HashMap<String, u32> = HashMap::new();
 
     for line in BufReader::new(file).lines() {
-        let line = line.unwrap();
-        let (word, cnt) = line.trim().split_once('\t').unwrap();
-        let cnt: u32 = cnt.parse().unwrap();
+        let line = line?;
+        let trimmed = line.trim();
+        let Some((word, cnt_str)) = trimmed.split_once('\t') else {
+            log::warn!("Skipping malformed wfreq line: {:?}", trimmed);
+            continue;
+        };
+        let cnt: u32 = match cnt_str.parse() {
+            Ok(v) => v,
+            Err(_) => {
+                log::warn!("Skipping unparseable count in wfreq line: {:?}", trimmed);
+                continue;
+            }
+        };
         if cnt > threshold {
             map.insert(word.to_string(), cnt);
         }
