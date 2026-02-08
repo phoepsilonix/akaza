@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
@@ -29,8 +30,8 @@ impl ExtractedWikipediaProcessor {
         })
     }
 
-    fn remove_yomigana(&self, src: &str) -> String {
-        self.yomigana_pattern.replace_all(src, "").to_string()
+    fn remove_yomigana<'a>(&self, src: &'a str) -> Cow<'a, str> {
+        self.yomigana_pattern.replace_all(src, "")
     }
 }
 
@@ -68,7 +69,8 @@ impl CorpusReader for ExtractedWikipediaProcessor {
             }
             let line = self.remove_yomigana(line);
 
-            buf += (annotate(line.as_str()).with_context(|| line)? + "\n").as_str();
+            buf.push_str(&annotate(&line).with_context(|| line.into_owned())?);
+            buf.push('\n');
         }
         let mut ofile = File::create(ofname)?;
         ofile.write_all(buf.as_bytes())?;
