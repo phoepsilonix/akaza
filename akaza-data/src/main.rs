@@ -211,6 +211,9 @@ struct EvaluateArgs {
     eucjp_dict: Vec<String>,
     #[arg(long)]
     model_dir: String,
+    /// k-best 評価（上位 k 個のパスに正解が含まれるか判定）
+    #[arg(long, default_value_t = 5)]
+    k_best: usize,
 }
 
 /// インクリメンタル変換のベンチマーク
@@ -322,7 +325,7 @@ fn main() -> anyhow::Result<()> {
             k_best: opt.k_best,
         }),
         Commands::Evaluate(opt) => {
-            evaluate(&opt.corpus, &opt.eucjp_dict, &opt.utf8_dict, opt.model_dir)
+            evaluate(&opt.corpus, &opt.eucjp_dict, &opt.utf8_dict, opt.model_dir, opt.k_best)
         }
         Commands::Bench(opt) => bench(BenchOptions {
             corpus: &opt.corpus,
