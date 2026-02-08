@@ -118,35 +118,33 @@ fn count_bigram(
     for line in BufReader::new(file).lines() {
         let line = line?;
         let line = line.trim();
-        let words = line.split(' ').collect::<Vec<_>>();
-        if words.is_empty() {
+
+        let mut prev_word_id: Option<i32> = bos_id.copied();
+        let mut last_word_id: Option<i32> = None;
+        let mut has_words = false;
+
+        for word in line.split(' ') {
+            if word.is_empty() {
+                continue;
+            }
+            has_words = true;
+            let cur_word_id = unigram_lm.get(word).copied();
+
+            if let (Some(prev), Some(cur)) = (prev_word_id, cur_word_id) {
+                *map.entry((prev, cur)).or_insert(0) += 1;
+            }
+
+            prev_word_id = cur_word_id;
+            last_word_id = cur_word_id;
+        }
+
+        if !has_words {
             continue;
-        }
-        // スライドしながらよんでいくので、同じ単語を二回ひかなくていいように
-        // 調整する
-        let word_ids = words
-            .iter()
-            .map(|word| unigram_lm.get(&word.to_string()))
-            .collect::<Vec<_>>();
-
-        // BOS → 最初の単語
-        if let (Some(bos), Some(first)) = (bos_id, word_ids.first().copied().flatten()) {
-            *map.entry((*bos, *first)).or_insert(0) += 1;
-        }
-
-        for i in 0..(word_ids.len().saturating_sub(1)) {
-            let Some(word_id1) = word_ids[i] else {
-                continue;
-            };
-            let Some(word_id2) = word_ids[i + 1] else {
-                continue;
-            };
-            *map.entry((*word_id1, *word_id2)).or_insert(0) += 1;
         }
 
         // 最後の単語 → EOS
-        if let (Some(last), Some(eos)) = (word_ids.last().copied().flatten(), eos_id) {
-            *map.entry((*last, *eos)).or_insert(0) += 1;
+        if let (Some(last), Some(eos)) = (last_word_id, eos_id) {
+            *map.entry((last, *eos)).or_insert(0) += 1;
         }
     }
     Ok(map)
