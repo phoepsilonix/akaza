@@ -58,6 +58,10 @@ pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
                         warn!("The document contains RTL character");
                         continue;
                     }
+                    // ASCII 制御文字を含むワードはゴミデータなのでスキップ
+                    if word.bytes().any(|b| b.is_ascii_control()) {
+                        continue;
+                    }
                     *batch_stats.entry(word.to_string()).or_insert(0) += 1;
                 }
             }
