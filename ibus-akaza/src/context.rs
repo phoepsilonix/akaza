@@ -64,13 +64,7 @@ impl AkazaContext {
         let keymap = Keymap::load(config.keymap.as_str())?;
 
         Ok(AkazaContext {
-            current_state: CurrentState::new(
-                input_mode,
-                config.live_conversion,
-                config.suggest,
-                romkan,
-                engine,
-            ),
+            current_state: CurrentState::new(input_mode, config.live_conversion, romkan, engine),
             command_map: ibus_akaza_commands_map(),
             keymap: IBusKeyMap::new(keymap)?,
             prop_controller: PropController::new(input_mode, config)?,
