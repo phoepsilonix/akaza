@@ -1,6 +1,9 @@
 use std::fmt::{Display, Formatter};
 use std::hash::{Hash, Hasher};
 
+pub const BOS_TOKEN_KEY: &str = "__BOS__/__BOS__";
+pub const EOS_TOKEN_KEY: &str = "__EOS__/__EOS__";
+
 #[derive(Debug, Clone)]
 pub struct WordNode {
     pub start_pos: i32,

@@ -111,11 +111,15 @@ fn count_bigram(
     info!("Counting {}", src.to_string_lossy());
     let file = File::open(src)?;
     let mut map: HashMap<(i32, i32), u32> = HashMap::new();
+
+    let bos_id = unigram_lm.get("__BOS__/__BOS__");
+    let eos_id = unigram_lm.get("__EOS__/__EOS__");
+
     for line in BufReader::new(file).lines() {
         let line = line?;
         let line = line.trim();
         let words = line.split(' ').collect::<Vec<_>>();
-        if words.len() < 2 {
+        if words.is_empty() {
             continue;
         }
         // スライドしながらよんでいくので、同じ単語を二回ひかなくていいように
@@ -125,21 +129,24 @@ fn count_bigram(
             .map(|word| unigram_lm.get(&word.to_string()))
             .collect::<Vec<_>>();
 
-        for i in 0..(word_ids.len() - 1) {
+        // BOS → 最初の単語
+        if let (Some(bos), Some(first)) = (bos_id, word_ids.first().copied().flatten()) {
+            *map.entry((*bos, *first)).or_insert(0) += 1;
+        }
+
+        for i in 0..(word_ids.len().saturating_sub(1)) {
             let Some(word_id1) = word_ids[i] else {
                 continue;
             };
             let Some(word_id2) = word_ids[i + 1] else {
                 continue;
             };
-            // info!(
-            //     "Register {}={}/{}={}",
-            //     words[i],
-            //     word_id1,
-            //     words[i + 1],
-            //     word_id2
-            // );
             *map.entry((*word_id1, *word_id2)).or_insert(0) += 1;
+        }
+
+        // 最後の単語 → EOS
+        if let (Some(last), Some(eos)) = (word_ids.last().copied().flatten(), eos_id) {
+            *map.entry((*last, *eos)).or_insert(0) += 1;
         }
     }
     Ok(map)
