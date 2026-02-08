@@ -32,9 +32,12 @@ impl BiGramUserStats {
      * エッジコストを計算する。
      * システム言語モデルのコストよりも安くなるように調整してある。
      */
-    pub(crate) fn get_cost(&self, key1: &str, key2: &str) -> Option<f32> {
-        let key = key1.to_owned() + "\t" + key2;
-        let count = self.word_count.get(key.as_str())?;
+    pub(crate) fn get_cost(&self, key1: &str, key2: &str, buf: &mut String) -> Option<f32> {
+        buf.clear();
+        buf.push_str(key1);
+        buf.push('\t');
+        buf.push_str(key2);
+        let count = self.word_count.get(buf.as_str())?;
         Some(calc_cost(*count, self.unique_words, self.total_words))
     }
 
