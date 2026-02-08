@@ -154,7 +154,8 @@ impl<U: SystemUnigramLM, B: SystemBigramLM> LatticeGraph<U, B> {
 
     pub(crate) fn get_edge_cost(&self, prev: &WordNode, node: &WordNode) -> f32 {
         let user_data = self.user_data.lock().unwrap();
-        self.get_edge_cost_with_user_data(prev, node, &user_data)
+        let mut buf = String::new();
+        self.get_edge_cost_with_user_data(prev, node, &user_data, &mut buf)
     }
 
     /// ロック済みの UserData を受け取るバージョン。
@@ -165,8 +166,9 @@ impl<U: SystemUnigramLM, B: SystemBigramLM> LatticeGraph<U, B> {
         prev: &WordNode,
         node: &WordNode,
         user_data: &UserData,
+        buf: &mut String,
     ) -> f32 {
-        if let Some(cost) = user_data.get_bigram_cost(prev, node) {
+        if let Some(cost) = user_data.get_bigram_cost(prev, node, buf) {
             return cost;
         }
 

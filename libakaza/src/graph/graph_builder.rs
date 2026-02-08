@@ -58,6 +58,8 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
         }
         graph.insert((yomi.len() + 1) as i32, vec![eos]);
 
+        let mut key_buf = String::new();
+
         for (end_pos, segmented_yomis) in words_ends_at.iter() {
             for segmented_yomi in segmented_yomis {
                 let vec = graph.entry(*end_pos as i32).or_default();
@@ -68,12 +70,15 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
                 // システム辞書にある候補を元に候補をリストアップする
                 if let Some(kanjis) = self.system_kana_kanji_dict.get(segmented_yomi) {
                     for kanji in kanjis {
+                        key_buf.clear();
+                        key_buf.push_str(&kanji);
+                        key_buf.push('/');
+                        key_buf.push_str(segmented_yomi);
                         let node = WordNode::new(
                             (end_pos - segmented_yomi.len()) as i32,
                             &kanji,
                             segmented_yomi,
-                            self.system_unigram_lm
-                                .find((kanji.to_string() + "/" + segmented_yomi).as_str()),
+                            self.system_unigram_lm.find(&key_buf),
                             false,
                         );
                         trace!("WordIDScore: {:?}", node.word_id_and_score);
@@ -86,12 +91,15 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
                         if seen.contains(surface) {
                             continue;
                         }
+                        key_buf.clear();
+                        key_buf.push_str(surface);
+                        key_buf.push('/');
+                        key_buf.push_str(segmented_yomi);
                         let node = WordNode::new(
                             (end_pos - segmented_yomi.len()) as i32,
                             surface,
                             segmented_yomi,
-                            self.system_unigram_lm
-                                .find((surface.to_string() + "/" + segmented_yomi).as_str()),
+                            self.system_unigram_lm.find(&key_buf),
                             false,
                         );
                         trace!("WordIDScore: {:?}", node.word_id_and_score);
@@ -134,12 +142,15 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
                 if segmented_yomi == yomi {
                     if let Some(surfaces) = self.system_single_term_dict.get(yomi) {
                         for surface in surfaces {
+                            key_buf.clear();
+                            key_buf.push_str(&surface);
+                            key_buf.push('/');
+                            key_buf.push_str(segmented_yomi);
                             let node = WordNode::new(
                                 (end_pos - segmented_yomi.len()) as i32,
                                 &surface,
                                 segmented_yomi,
-                                self.system_unigram_lm
-                                    .find((surface.to_string() + "/" + segmented_yomi).as_str()),
+                                self.system_unigram_lm.find(&key_buf),
                                 false,
                             );
                             vec.push(node);
