@@ -27,7 +27,7 @@ jobs:
         sudo apt-get install ibus libgirepository1.0-dev libmarisa-dev clang libibus-1.0-dev unzip libgtk-4-dev
     - name: make some configuration files for ibus-akaza
       run: |
-        cd ibus-akaza/ && make
+        cd ibus-akaza/ && make akaza.xml config.h
     - uses: dtolnay/rust-toolchain@master
       with:
           toolchain: "1.92.0"
@@ -87,7 +87,7 @@ jobs:
         cd akaza-data/ && make test-data
     - name: make some configuration files for ibus-akaza
       run: |
-        cd ibus-akaza/ && make
+        cd ibus-akaza/ && make akaza.xml config.h
     - uses: dtolnay/rust-toolchain@master
       with:
           toolchain: "1.92.0"
