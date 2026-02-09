@@ -7,7 +7,7 @@ use anyhow::Context;
 use anyhow::Result;
 use chrono::Local;
 use log::info;
-use rayon::prelude::*;
+use redb::{Database, ReadableTable, TableDefinition};
 use rustc_hash::FxHashMap;
 
 use libakaza::lm::base::{SystemBigramLM, SystemUnigramLM};
@@ -15,6 +15,22 @@ use libakaza::lm::base::{SystemBigramLM, SystemUnigramLM};
 use crate::utils::get_file_list;
 use crate::wordcnt::wordcnt_bigram::{WordcntBigram, WordcntBigramBuilder};
 use crate::wordcnt::wordcnt_unigram::WordcntUnigram;
+
+/// redb テーブル: キーは (i32, i32) を 8 バイトにエンコード、値は u32
+const BIGRAM_TABLE: TableDefinition<&[u8], u32> = TableDefinition::new("bigram");
+
+fn encode_key(id1: i32, id2: i32) -> [u8; 8] {
+    let mut buf = [0u8; 8];
+    buf[..4].copy_from_slice(&id1.to_be_bytes());
+    buf[4..].copy_from_slice(&id2.to_be_bytes());
+    buf
+}
+
+fn decode_key(buf: &[u8]) -> (i32, i32) {
+    let id1 = i32::from_be_bytes(buf[..4].try_into().unwrap());
+    let id2 = i32::from_be_bytes(buf[4..].try_into().unwrap());
+    (id1, id2)
+}
 
 pub fn make_stats_system_bigram_lm(
     threshold: u32,
@@ -48,27 +64,78 @@ pub fn make_stats_system_bigram_lm(
             file_list.push(x)
         }
     }
-    let results = file_list
-        .par_iter()
-        .map(|src| count_bigram(src, &unigram_map))
-        .collect::<Vec<_>>();
 
-    // 集計した結果をマージする
-    info!("Merging");
-    let mut merged: FxHashMap<(i32, i32), u32> = FxHashMap::default();
-    for result in results {
-        let result = result?;
-        for (word_ids, cnt) in result {
-            *merged.entry(word_ids).or_insert(0) += cnt;
+    // redb でオンディスク集計
+    let tmp_db = tempfile::NamedTempFile::new()?;
+    let db = Database::create(tmp_db.path())?;
+
+    let bos_id = unigram_map.get("__BOS__/__BOS__").copied();
+    let eos_id = unigram_map.get("__EOS__/__EOS__").copied();
+
+    const BATCH_SIZE: usize = 100;
+    for (batch_idx, chunk) in file_list.chunks(BATCH_SIZE).enumerate() {
+        let batch_start = batch_idx * BATCH_SIZE + 1;
+        let batch_end = (batch_start + chunk.len() - 1).min(file_list.len());
+        info!(
+            "Processing batch {}-{}/{} ({} files)",
+            batch_start,
+            batch_end,
+            file_list.len(),
+            chunk.len()
+        );
+
+        // バッチ内の全ファイルをメモリ上で集計
+        let mut batch_stats: FxHashMap<(i32, i32), u32> = FxHashMap::default();
+        for path_buf in chunk {
+            info!("  Counting {}", path_buf.to_string_lossy());
+            let file = File::open(path_buf)?;
+
+            for line in BufReader::new(file).lines() {
+                let line = line?;
+                let line = line.trim();
+
+                let mut prev_word_id: Option<i32> = bos_id;
+                let mut last_word_id: Option<i32> = None;
+                let mut has_words = false;
+
+                for word in line.split(' ') {
+                    if word.is_empty() {
+                        continue;
+                    }
+                    has_words = true;
+                    let cur_word_id = unigram_map.get(word).copied();
+
+                    if let (Some(prev), Some(cur)) = (prev_word_id, cur_word_id) {
+                        *batch_stats.entry((prev, cur)).or_insert(0) += 1;
+                    }
+
+                    prev_word_id = cur_word_id;
+                    last_word_id = cur_word_id;
+                }
+
+                if !has_words {
+                    continue;
+                }
+
+                // 最後の単語 → EOS
+                if let (Some(last), Some(eos)) = (last_word_id, eos_id) {
+                    *batch_stats.entry((last, eos)).or_insert(0) += 1;
+                }
+            }
         }
-    }
 
-    // スコアを計算する
-    let wordcnt = merged
-        .iter()
-        .filter(|(_, cnt)| **cnt > threshold)
-        .map(|((id1, id2), cnt)| ((*id1, *id2), *cnt))
-        .collect::<FxHashMap<(i32, i32), u32>>();
+        // バッチ分をまとめて 1 トランザクションで DB にマージ
+        let write_txn = db.begin_write()?;
+        {
+            let mut table = write_txn.open_table(BIGRAM_TABLE)?;
+            for ((id1, id2), cnt) in &batch_stats {
+                let key = encode_key(*id1, *id2);
+                let prev = table.get(key.as_slice())?.map(|v| v.value()).unwrap_or(0);
+                table.insert(key.as_slice(), prev + cnt)?;
+            }
+        }
+        write_txn.commit()?;
+    }
 
     // dump bigram text file.
     let dumpfname = format!(
@@ -76,25 +143,35 @@ pub fn make_stats_system_bigram_lm(
         Local::now().format("%Y%m%d-%H%M%S")
     );
     println!("Dump to text file: {dumpfname}");
-    let mut file = File::create(dumpfname)?;
-    for ((word_id1, word_id2), cnt) in &merged {
-        let Some(word1) = reverse_unigram_map.get(word_id1) else {
-            continue;
-        };
-        let Some(word2) = reverse_unigram_map.get(word_id2) else {
-            continue;
-        };
-        if *cnt > 16 {
-            file.write_fmt(format_args!("{cnt}\t{word1}\t{word2}\n"))?;
-        }
-    }
+    let mut dump_file = File::create(&dumpfname)?;
 
     // 結果を書き込む
     info!("Generating trie file");
     let mut builder = WordcntBigramBuilder::default();
-    for ((word_id1, word_id2), cnt) in wordcnt {
-        builder.add(word_id1, word_id2, cnt);
+
+    let read_txn = db.begin_read()?;
+    let table = read_txn.open_table(BIGRAM_TABLE)?;
+    for entry in table.iter()? {
+        let entry = entry?;
+        let (word_id1, word_id2) = decode_key(entry.0.value());
+        let cnt = entry.1.value();
+
+        // dump (cnt > 16)
+        if cnt > 16 {
+            if let (Some(word1), Some(word2)) = (
+                reverse_unigram_map.get(&word_id1),
+                reverse_unigram_map.get(&word_id2),
+            ) {
+                dump_file.write_fmt(format_args!("{cnt}\t{word1}\t{word2}\n"))?;
+            }
+        }
+
+        // threshold で足切り
+        if cnt > threshold {
+            builder.add(word_id1, word_id2, cnt);
+        }
     }
+
     info!("Writing {}", bigram_trie_file);
     builder.save(bigram_trie_file)?;
 
@@ -102,52 +179,6 @@ pub fn make_stats_system_bigram_lm(
 
     println!("DONE");
     Ok(())
-}
-
-fn count_bigram(
-    src: &PathBuf,
-    unigram_lm: &FxHashMap<String, i32>,
-) -> Result<FxHashMap<(i32, i32), u32>> {
-    info!("Counting {}", src.to_string_lossy());
-    let file = File::open(src)?;
-    let mut map: FxHashMap<(i32, i32), u32> = FxHashMap::default();
-
-    let bos_id = unigram_lm.get("__BOS__/__BOS__");
-    let eos_id = unigram_lm.get("__EOS__/__EOS__");
-
-    for line in BufReader::new(file).lines() {
-        let line = line?;
-        let line = line.trim();
-
-        let mut prev_word_id: Option<i32> = bos_id.copied();
-        let mut last_word_id: Option<i32> = None;
-        let mut has_words = false;
-
-        for word in line.split(' ') {
-            if word.is_empty() {
-                continue;
-            }
-            has_words = true;
-            let cur_word_id = unigram_lm.get(word).copied();
-
-            if let (Some(prev), Some(cur)) = (prev_word_id, cur_word_id) {
-                *map.entry((prev, cur)).or_insert(0) += 1;
-            }
-
-            prev_word_id = cur_word_id;
-            last_word_id = cur_word_id;
-        }
-
-        if !has_words {
-            continue;
-        }
-
-        // 最後の単語 → EOS
-        if let (Some(last), Some(eos)) = (last_word_id, eos_id) {
-            *map.entry((last, *eos)).or_insert(0) += 1;
-        }
-    }
-    Ok(map)
 }
 
 // 言語モデルファイルが正確に生成されたか確認を実施する
