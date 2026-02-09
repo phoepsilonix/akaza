@@ -4,6 +4,19 @@ use std::io::{BufRead, BufReader, Write};
 
 use log::{info, warn};
 
+/// Check if a string contains at least one Japanese character
+/// (hiragana, katakana, CJK unified ideographs, or CJK extension A).
+fn contains_japanese(s: &str) -> bool {
+    s.chars().any(|c| {
+        matches!(c,
+            '\u{3040}'..='\u{309F}'   // Hiragana
+            | '\u{30A0}'..='\u{30FF}' // Katakana
+            | '\u{4E00}'..='\u{9FFF}' // CJK Unified Ideographs
+            | '\u{3400}'..='\u{4DBF}' // CJK Unified Ideographs Extension A
+        )
+    })
+}
+
 /// wfreq (単語の発生頻度表)から vocab (語彙ファイル)を作成する。
 pub fn vocab(src_file: &str, dst_file: &str, threshold: u32) -> anyhow::Result<()> {
     info!(
@@ -26,6 +39,11 @@ pub fn vocab(src_file: &str, dst_file: &str, threshold: u32) -> anyhow::Result<(
         }
         if !word.contains('/') {
             warn!("Invalid word: {:?}", line);
+            continue;
+        }
+        let surface = word.split('/').next().unwrap_or("");
+        if !contains_japanese(surface) {
+            warn!("Skipping non-Japanese surface: {:?}", word);
             continue;
         }
         let cnt: u32 = cnt.parse()?;
