@@ -55,3 +55,115 @@ pub fn vocab(src_file: &str, dst_file: &str, threshold: u32) -> anyhow::Result<(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_contains_japanese_hiragana() {
+        assert!(contains_japanese("あ"));
+        assert!(contains_japanese("こんにちは"));
+    }
+
+    #[test]
+    fn test_contains_japanese_katakana() {
+        assert!(contains_japanese("ア"));
+        assert!(contains_japanese("カタカナ"));
+    }
+
+    #[test]
+    fn test_contains_japanese_kanji() {
+        assert!(contains_japanese("漢"));
+        assert!(contains_japanese("東京"));
+    }
+
+    #[test]
+    fn test_contains_japanese_cjk_ext_a() {
+        // U+3400 is in CJK Unified Ideographs Extension A
+        assert!(contains_japanese("\u{3400}"));
+    }
+
+    #[test]
+    fn test_contains_japanese_mixed() {
+        assert!(contains_japanese("hello世界"));
+        assert!(contains_japanese("123あ456"));
+    }
+
+    #[test]
+    fn test_contains_japanese_pure_ascii() {
+        assert!(!contains_japanese("hello"));
+        assert!(!contains_japanese("!!!!!"));
+        assert!(!contains_japanese("http"));
+        assert!(!contains_japanese("(^_^;)"));
+        assert!(!contains_japanese("(-_-;)"));
+    }
+
+    #[test]
+    fn test_contains_japanese_emoji_only() {
+        assert!(!contains_japanese("😣"));
+        assert!(!contains_japanese("🎉🎊"));
+    }
+
+    #[test]
+    fn test_contains_japanese_symbols_only() {
+        assert!(!contains_japanese("⇩"));
+        assert!(!contains_japanese("✓"));
+        assert!(!contains_japanese("→←↑↓"));
+    }
+
+    #[test]
+    fn test_contains_japanese_empty() {
+        assert!(!contains_japanese(""));
+    }
+
+    #[test]
+    fn test_vocab_filters_non_japanese_surface() {
+        let mut src = NamedTempFile::new().unwrap();
+        // Japanese surface: should be included (cnt > threshold=0)
+        writeln!(src, "東京/トウキョウ\t10").unwrap();
+        // Pure ASCII surface: should be filtered
+        writeln!(src, "!!!!!/キゴウ\t10").unwrap();
+        // Emoticon surface: should be filtered
+        writeln!(src, "(^_^;)/カオモジ\t10").unwrap();
+        // Emoji surface: should be filtered
+        writeln!(src, "😣/エモジ\t10").unwrap();
+        // Katakana surface: should be included
+        writeln!(src, "カタカナ/カタカナ\t10").unwrap();
+        // Hiragana surface: should be included
+        writeln!(src, "ひらがな/ヒラガナ\t10").unwrap();
+        src.flush().unwrap();
+
+        let dst = NamedTempFile::new().unwrap();
+        let dst_path = dst.path().to_str().unwrap().to_string();
+
+        vocab(src.path().to_str().unwrap(), &dst_path, 0).unwrap();
+
+        let result = fs::read_to_string(&dst_path).unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+        assert_eq!(lines.len(), 3);
+        assert_eq!(lines[0], "東京/トウキョウ");
+        assert_eq!(lines[1], "カタカナ/カタカナ");
+        assert_eq!(lines[2], "ひらがな/ヒラガナ");
+    }
+
+    #[test]
+    fn test_vocab_respects_threshold() {
+        let mut src = NamedTempFile::new().unwrap();
+        writeln!(src, "東京/トウキョウ\t100").unwrap();
+        writeln!(src, "大阪/オオサカ\t5").unwrap();
+        src.flush().unwrap();
+
+        let dst = NamedTempFile::new().unwrap();
+        let dst_path = dst.path().to_str().unwrap().to_string();
+
+        vocab(src.path().to_str().unwrap(), &dst_path, 10).unwrap();
+
+        let result = fs::read_to_string(&dst_path).unwrap();
+        let lines: Vec<&str> = result.lines().collect();
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0], "東京/トウキョウ");
+    }
+}
