@@ -16,7 +16,10 @@ pub fn vocab(src_file: &str, dst_file: &str, threshold: u32) -> anyhow::Result<(
     for line in BufReader::new(ifp).lines() {
         let line = line?;
         let line = line.trim();
-        let (word, cnt) = line.split_once('\t').unwrap();
+        let Some((word, cnt)) = line.split_once('\t') else {
+            warn!("Skipping malformed wfreq line: {:?}", line);
+            continue;
+        };
         if word.starts_with(' ') || word.starts_with('/') {
             warn!("Invalid word: {:?}", line);
             continue;
