@@ -12,7 +12,7 @@ use rustc_hash::FxHashMap;
 
 use libakaza::lm::base::{SystemBigramLM, SystemUnigramLM};
 
-use crate::utils::{get_file_list, parse_dir_weight};
+use crate::utils::{get_file_list, normalize_num_token, parse_dir_weight};
 use crate::wordcnt::wordcnt_bigram::{WordcntBigram, WordcntBigramBuilder};
 use crate::wordcnt::wordcnt_unigram::WordcntUnigram;
 
@@ -110,7 +110,8 @@ pub fn make_stats_system_bigram_lm(
                         continue;
                     }
                     has_words = true;
-                    let cur_word_id = unigram_map.get(word).copied();
+                    let normalized = normalize_num_token(word);
+                    let cur_word_id = unigram_map.get(normalized.as_ref()).copied();
 
                     if let (Some(prev), Some(cur)) = (prev_word_id, cur_word_id) {
                         *batch_stats.entry((prev, cur)).or_insert(0.0) += weight;
