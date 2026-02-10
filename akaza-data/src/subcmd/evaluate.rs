@@ -176,8 +176,11 @@ pub fn evaluate(
                         } else {
                             let k_results = engine.convert_k_best(yomi.as_str(), None, k_best)?;
                             let in_topk = k_results.iter().any(|path| {
-                                let s: String =
-                                    path.iter().map(|seg| seg[0].surface.clone()).collect();
+                                let s: String = path
+                                    .segments
+                                    .iter()
+                                    .map(|seg| seg[0].surface.clone())
+                                    .collect();
                                 s == *surface
                             });
 

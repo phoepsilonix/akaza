@@ -1,6 +1,7 @@
 use std::ops::Range;
 
 use crate::graph::candidate::Candidate;
+use crate::graph::graph_resolver::KBestPath;
 
 pub trait HenkanEngine {
     fn learn(&mut self, candidates: &[Candidate]);
@@ -12,11 +13,11 @@ pub trait HenkanEngine {
     ) -> anyhow::Result<Vec<Vec<Candidate>>>;
 
     /// k-best ビタビで上位 k 個の分節パターンを返す。
-    /// 外側がパス（分節パターン）、中が文節、内が漢字候補。
+    /// 各パスは分節パターン（文節×漢字候補）と真のパスコストを持つ。
     fn convert_k_best(
         &self,
         yomi: &str,
         force_ranges: Option<&[Range<usize>]>,
         k: usize,
-    ) -> anyhow::Result<Vec<Vec<Vec<Candidate>>>>;
+    ) -> anyhow::Result<Vec<KBestPath>>;
 }
