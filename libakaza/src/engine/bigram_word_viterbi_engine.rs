@@ -11,7 +11,7 @@ use crate::dict::loader::{load_dicts, load_dicts_with_cache};
 use crate::engine::base::HenkanEngine;
 use crate::graph::candidate::Candidate;
 use crate::graph::graph_builder::GraphBuilder;
-use crate::graph::graph_resolver::GraphResolver;
+use crate::graph::graph_resolver::{GraphResolver, KBestPath};
 use crate::graph::lattice_graph::LatticeGraph;
 use crate::graph::segmenter::Segmenter;
 use crate::kana_kanji::base::KanaKanjiDict;
@@ -63,7 +63,7 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> HenkanEngine
         yomi: &str,
         force_ranges: Option<&[Range<usize>]>,
         k: usize,
-    ) -> Result<Vec<Vec<Vec<Candidate>>>> {
+    ) -> Result<Vec<KBestPath>> {
         let lattice = self.to_lattice(yomi, force_ranges)?;
         self.graph_resolver.resolve_k_best(&lattice, k)
     }

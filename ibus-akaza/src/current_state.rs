@@ -25,6 +25,7 @@ use libakaza::engine::bigram_word_viterbi_engine::BigramWordViterbiEngine;
 use libakaza::extend_clause::{extend_left, extend_right};
 // 文節伸縮・選択の仕様は docs/clause-extension-behavior.md を参照。
 use libakaza::graph::candidate::Candidate;
+use libakaza::graph::graph_resolver::KBestPath;
 use libakaza::kana_kanji::marisa_kana_kanji_dict::MarisaKanaKanjiDict;
 use libakaza::keymap::KeyState;
 use libakaza::lm::system_bigram::MarisaSystemBigramLM;
@@ -60,7 +61,7 @@ pub struct CurrentState {
         BigramWordViterbiEngine<MarisaSystemUnigramLM, MarisaSystemBigramLM, MarisaKanaKanjiDict>,
     consonant_suffix_extractor: ConsonantSuffixExtractor,
     /// k-best の分節パターン候補
-    segmentation_alternatives: Vec<Vec<Vec<Candidate>>>,
+    segmentation_alternatives: Vec<KBestPath>,
     /// 現在選択中の分節パターン (0 = 1-best)
     current_segmentation: usize,
 }
@@ -210,7 +211,7 @@ impl CurrentState {
                 let clauses = self
                     .segmentation_alternatives
                     .first()
-                    .cloned()
+                    .map(|p| p.segments.clone())
                     .unwrap_or_default();
                 self.set_clauses(engine, clauses);
             };
@@ -276,7 +277,7 @@ impl CurrentState {
             // サジェスト中は k-best の各分節パターンの変換結果全文を表示する
             let empty = HashMap::new();
             for alt in &self.segmentation_alternatives {
-                let s = build_string_from_clauses(alt, &empty);
+                let s = build_string_from_clauses(&alt.segments, &empty);
                 self.lookup_table.append_candidate(s.to_ibus_text());
             }
         } else {
@@ -371,7 +372,7 @@ impl CurrentState {
         if self.lookup_table.cursor_down() {
             let idx = self.lookup_table.get_cursor_pos() as usize;
             self.current_segmentation = idx;
-            self.clauses = self.segmentation_alternatives[idx].clone();
+            self.clauses = self.segmentation_alternatives[idx].segments.clone();
             self.node_selected.clear();
             self.current_clause = 0;
             self.suggest_candidate_selected = true;
@@ -389,7 +390,7 @@ impl CurrentState {
         if self.lookup_table.cursor_up() {
             let idx = self.lookup_table.get_cursor_pos() as usize;
             self.current_segmentation = idx;
-            self.clauses = self.segmentation_alternatives[idx].clone();
+            self.clauses = self.segmentation_alternatives[idx].segments.clone();
             self.node_selected.clear();
             self.current_clause = 0;
             self.suggest_candidate_selected = true;
@@ -407,7 +408,9 @@ impl CurrentState {
         }
         self.current_segmentation =
             (self.current_segmentation + 1) % self.segmentation_alternatives.len();
-        self.clauses = self.segmentation_alternatives[self.current_segmentation].clone();
+        self.clauses = self.segmentation_alternatives[self.current_segmentation]
+            .segments
+            .clone();
         self.node_selected.clear();
         self.current_clause = 0;
         self.on_clauses_change(engine);

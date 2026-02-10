@@ -10,6 +10,7 @@ use libakaza::engine::bigram_word_viterbi_engine::{
     BigramWordViterbiEngine, BigramWordViterbiEngineBuilder,
 };
 use libakaza::graph::candidate::Candidate;
+use libakaza::graph::graph_resolver::KBestPath;
 use libakaza::kana_kanji::base::KanaKanjiDict;
 use libakaza::lm::base::{SystemBigramLM, SystemUnigramLM};
 use libakaza::user_side_data::user_data::UserData;
@@ -220,17 +221,14 @@ fn print_json(input: &str, result: &[Vec<Candidate>]) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn print_k_best_text(paths: &[Vec<Vec<Candidate>>]) {
+fn print_k_best_text(paths: &[KBestPath]) {
     for (i, path) in paths.iter().enumerate() {
         let text: Vec<String> = path
+            .segments
             .iter()
             .filter_map(|segment| segment.first().map(|c| c.surface_with_dynamic()))
             .collect();
-        let total_cost: f32 = path
-            .iter()
-            .filter_map(|segment| segment.first().map(|c| c.cost))
-            .sum();
-        println!("[{}] {} (cost: {:.4})", i + 1, text.join("/"), total_cost);
+        println!("[{}] {} (cost: {:.4})", i + 1, text.join("/"), path.cost);
     }
 }
 
@@ -250,7 +248,7 @@ struct KBestPathOutput {
 
 fn print_k_best_json(
     input: &str,
-    paths: &[Vec<Vec<Candidate>>],
+    paths: &[KBestPath],
     num_candidates: usize,
 ) -> anyhow::Result<()> {
     let paths_output: Vec<KBestPathOutput> = paths
@@ -258,6 +256,7 @@ fn print_k_best_json(
         .enumerate()
         .map(|(i, path)| {
             let segments: Vec<SegmentOutput> = path
+                .segments
                 .iter()
                 .map(|segment| {
                     let yomi = segment.first().map(|c| c.yomi.clone()).unwrap_or_default();
@@ -274,20 +273,16 @@ fn print_k_best_json(
                 .collect();
 
             let best_result: Vec<String> = path
+                .segments
                 .iter()
                 .filter_map(|segment| segment.first().map(|c| c.surface_with_dynamic()))
                 .collect();
-
-            let total_cost: f32 = path
-                .iter()
-                .filter_map(|segment| segment.first().map(|c| c.cost))
-                .sum();
 
             KBestPathOutput {
                 rank: i + 1,
                 segments,
                 best_result: best_result.join("/"),
-                total_cost,
+                total_cost: path.cost,
             }
         })
         .collect();
