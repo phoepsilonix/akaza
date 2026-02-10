@@ -14,6 +14,23 @@ use crate::kana_kanji::base::KanaKanjiDict;
 use crate::lm::base::{SystemBigramLM, SystemUnigramLM};
 use crate::user_side_data::user_data::UserData;
 
+/// surface が数字プレフィックスの場合、LM lookup 用のキーを `<NUM>` 正規化する。
+/// `libakaza` は `akaza-data` に依存しないため、同等のロジックをインラインで持つ。
+fn normalize_surface_for_lm(key: &str) -> Option<String> {
+    let slash_pos = key.find('/')?;
+    let surface = &key[..slash_pos];
+    let digit_end = surface.bytes().take_while(|b| b.is_ascii_digit()).count();
+    if digit_end == 0 {
+        return None;
+    }
+    let suffix = &surface[digit_end..];
+    if suffix.is_empty() {
+        Some("<NUM>/<NUM>".to_string())
+    } else {
+        Some(format!("<NUM>{0}/<NUM>{0}", suffix))
+    }
+}
+
 pub struct GraphBuilder<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> {
     system_kana_kanji_dict: KD,
     system_single_term_dict: KD,
@@ -74,11 +91,16 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
                         key_buf.push_str(&kanji);
                         key_buf.push('/');
                         key_buf.push_str(segmented_yomi);
+                        let word_id_and_score =
+                            self.system_unigram_lm.find(&key_buf).or_else(|| {
+                                normalize_surface_for_lm(&key_buf)
+                                    .and_then(|nk| self.system_unigram_lm.find(&nk))
+                            });
                         let node = WordNode::new(
                             (end_pos - segmented_yomi.len()) as i32,
                             &kanji,
                             segmented_yomi,
-                            self.system_unigram_lm.find(&key_buf),
+                            word_id_and_score,
                             false,
                         );
                         trace!("WordIDScore: {:?}", node.word_id_and_score);
@@ -95,11 +117,16 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
                         key_buf.push_str(surface);
                         key_buf.push('/');
                         key_buf.push_str(segmented_yomi);
+                        let word_id_and_score =
+                            self.system_unigram_lm.find(&key_buf).or_else(|| {
+                                normalize_surface_for_lm(&key_buf)
+                                    .and_then(|nk| self.system_unigram_lm.find(&nk))
+                            });
                         let node = WordNode::new(
                             (end_pos - segmented_yomi.len()) as i32,
                             surface,
                             segmented_yomi,
-                            self.system_unigram_lm.find(&key_buf),
+                            word_id_and_score,
                             false,
                         );
                         trace!("WordIDScore: {:?}", node.word_id_and_score);
@@ -146,11 +173,16 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
                             key_buf.push_str(&surface);
                             key_buf.push('/');
                             key_buf.push_str(segmented_yomi);
+                            let word_id_and_score =
+                                self.system_unigram_lm.find(&key_buf).or_else(|| {
+                                    normalize_surface_for_lm(&key_buf)
+                                        .and_then(|nk| self.system_unigram_lm.find(&nk))
+                                });
                             let node = WordNode::new(
                                 (end_pos - segmented_yomi.len()) as i32,
                                 &surface,
                                 segmented_yomi,
-                                self.system_unigram_lm.find(&key_buf),
+                                word_id_and_score,
                                 false,
                             );
                             vec.push(node);
@@ -275,5 +307,23 @@ mod tests {
         let got_surfaces: Vec<String> = nodes.iter().map(|f| f.surface.to_string()).collect();
         assert_eq!(got_surfaces, vec!["す".to_string(), "ス".to_string()]);
         Ok(())
+    }
+
+    #[test]
+    fn test_normalize_surface_for_lm() {
+        assert_eq!(
+            normalize_surface_for_lm("1匹/1ひき"),
+            Some("<NUM>匹/<NUM>匹".to_string())
+        );
+        assert_eq!(
+            normalize_surface_for_lm("100円/100えん"),
+            Some("<NUM>円/<NUM>円".to_string())
+        );
+        assert_eq!(
+            normalize_surface_for_lm("1/1"),
+            Some("<NUM>/<NUM>".to_string())
+        );
+        assert_eq!(normalize_surface_for_lm("匹/ひき"), None);
+        assert_eq!(normalize_surface_for_lm("第1回/だい1かい"), None);
     }
 }
