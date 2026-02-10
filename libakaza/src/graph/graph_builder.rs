@@ -14,8 +14,11 @@ use crate::kana_kanji::base::KanaKanjiDict;
 use crate::lm::base::{SystemBigramLM, SystemUnigramLM};
 use crate::user_side_data::user_data::UserData;
 
-/// surface が数字プレフィックスの場合、LM lookup 用のキーを `<NUM>` 正規化する。
+/// surface が数字+接尾辞の場合、LM lookup 用のキーを `<NUM>` 正規化する。
 /// `libakaza` は `akaza-data` に依存しないため、同等のロジックをインラインで持つ。
+///
+/// 裸の数字（suffix なし）はフォールバックしない。全数字カウント集約により
+/// `<NUM>/<NUM>` のスコアが極端に高くなり、「に→2」「さん→3」等の退行を起こすため。
 fn normalize_surface_for_lm(key: &str) -> Option<String> {
     let slash_pos = key.find('/')?;
     let surface = &key[..slash_pos];
@@ -25,7 +28,8 @@ fn normalize_surface_for_lm(key: &str) -> Option<String> {
     }
     let suffix = &surface[digit_end..];
     if suffix.is_empty() {
-        Some("<NUM>/<NUM>".to_string())
+        // 裸の数字はフォールバックしない
+        None
     } else {
         Some(format!("<NUM>{0}/<NUM>{0}", suffix))
     }
@@ -319,10 +323,8 @@ mod tests {
             normalize_surface_for_lm("100円/100えん"),
             Some("<NUM>円/<NUM>円".to_string())
         );
-        assert_eq!(
-            normalize_surface_for_lm("1/1"),
-            Some("<NUM>/<NUM>".to_string())
-        );
+        // 裸の数字はフォールバックしない（スコア集約による退行を防止）
+        assert_eq!(normalize_surface_for_lm("1/1"), None);
         assert_eq!(normalize_surface_for_lm("匹/ひき"), None);
         assert_eq!(normalize_surface_for_lm("第1回/だい1かい"), None);
     }
