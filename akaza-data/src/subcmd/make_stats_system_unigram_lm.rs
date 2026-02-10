@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{prelude::*, BufReader};
 
+use crate::utils::normalize_num_token;
 use crate::wordcnt::wordcnt_unigram::WordcntUnigramBuilder;
 
 /// 統計的かな漢字変換のためのユニグラムシステム言語モデルの作成
@@ -51,9 +52,11 @@ fn parse_wfreq(src_file: &str, threshold: u32) -> anyhow::Result<HashMap<String,
                 continue;
             }
         };
-        if cnt > threshold {
-            map.insert(word.to_string(), cnt);
-        }
+        // 数字トークンを <NUM> に正規化してカウントを集約
+        let normalized = normalize_num_token(word);
+        *map.entry(normalized.into_owned()).or_insert(0) += cnt;
     }
+    // threshold フィルタは集約後に適用（個別では threshold 以下でも集約後に超える場合がある）
+    map.retain(|_, cnt| *cnt > threshold);
     Ok(map)
 }

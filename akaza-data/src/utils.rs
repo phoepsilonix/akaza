@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use chrono::Local;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -31,30 +33,25 @@ pub fn get_file_list(src_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
     Ok(result)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_dir_weight_with_weight() {
-        let (path, weight) = parse_dir_weight("work/jawiki/:0.3");
-        assert_eq!(path, "work/jawiki/");
-        assert!((weight - 0.3).abs() < f64::EPSILON);
+/// 数字プレフィックスを `<NUM>` に正規化する。
+///
+/// - `"1匹/1ひき"` → `"<NUM>匹/<NUM>匹"`
+/// - `"1/1"` → `"<NUM>/<NUM>"`
+/// - `"匹/ひき"` → `"匹/ひき"` (変換なし)
+pub fn normalize_num_token(word: &str) -> Cow<'_, str> {
+    let Some(slash_pos) = word.find('/') else {
+        return Cow::Borrowed(word);
+    };
+    let surface = &word[..slash_pos];
+    let digit_end = surface.bytes().take_while(|b| b.is_ascii_digit()).count();
+    if digit_end == 0 {
+        return Cow::Borrowed(word);
     }
-
-    #[test]
-    fn test_parse_dir_weight_without_weight() {
-        let (path, weight) = parse_dir_weight("work/jawiki/");
-        assert_eq!(path, "work/jawiki/");
-        assert!((weight - 1.0).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn test_parse_dir_weight_with_colon_in_path() {
-        // Windows-style path like "C:/Users/foo" should not be parsed as weight
-        let (path, weight) = parse_dir_weight("C:/Users/foo");
-        assert_eq!(path, "C:/Users/foo");
-        assert!((weight - 1.0).abs() < f64::EPSILON);
+    let suffix = &surface[digit_end..];
+    if suffix.is_empty() {
+        Cow::Borrowed("<NUM>/<NUM>")
+    } else {
+        Cow::Owned(format!("<NUM>{0}/<NUM>{0}", suffix))
     }
 }
 
@@ -74,4 +71,62 @@ pub fn copy_snapshot(path: &Path) -> anyhow::Result<()> {
         ),
     )?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_dir_weight_with_weight() {
+        let (path, weight) = parse_dir_weight("work/jawiki/:0.3");
+        assert_eq!(path, "work/jawiki/");
+        assert!((weight - 0.3).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_parse_dir_weight_without_weight() {
+        let (path, weight) = parse_dir_weight("work/jawiki/");
+        assert_eq!(path, "work/jawiki/");
+        assert!((weight - 1.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_normalize_num_token_with_suffix() {
+        assert_eq!(normalize_num_token("1匹/1ひき"), "<NUM>匹/<NUM>匹");
+    }
+
+    #[test]
+    fn test_normalize_num_token_with_suffix_yen() {
+        assert_eq!(normalize_num_token("100円/100えん"), "<NUM>円/<NUM>円");
+    }
+
+    #[test]
+    fn test_normalize_num_token_digit_only() {
+        assert_eq!(normalize_num_token("1/1"), "<NUM>/<NUM>");
+    }
+
+    #[test]
+    fn test_normalize_num_token_no_digit() {
+        assert_eq!(normalize_num_token("匹/ひき"), "匹/ひき");
+    }
+
+    #[test]
+    fn test_normalize_num_token_non_leading_digit() {
+        // 「第」で始まるので変換なし
+        assert_eq!(normalize_num_token("第1回/だい1かい"), "第1回/だい1かい");
+    }
+
+    #[test]
+    fn test_normalize_num_token_year() {
+        assert_eq!(normalize_num_token("2019年/2019ねん"), "<NUM>年/<NUM>年");
+    }
+
+    #[test]
+    fn test_parse_dir_weight_with_colon_in_path() {
+        // Windows-style path like "C:/Users/foo" should not be parsed as weight
+        let (path, weight) = parse_dir_weight("C:/Users/foo");
+        assert_eq!(path, "C:/Users/foo");
+        assert!((weight - 1.0).abs() < f64::EPSILON);
+    }
 }
