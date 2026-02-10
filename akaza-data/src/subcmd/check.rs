@@ -228,12 +228,7 @@ fn print_k_best_text(paths: &[KBestPath]) {
             .iter()
             .filter_map(|segment| segment.first().map(|c| c.surface_with_dynamic()))
             .collect();
-        println!(
-            "[{}] {} (cost: {:.4})",
-            i + 1,
-            text.join("/"),
-            path.cost
-        );
+        println!("[{}] {} (cost: {:.4})", i + 1, text.join("/"), path.cost);
     }
 }
 
