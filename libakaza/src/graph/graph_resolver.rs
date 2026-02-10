@@ -9,6 +9,15 @@ use crate::graph::lattice_graph::LatticeGraph;
 use crate::graph::word_node::WordNode;
 use crate::lm::base::{SystemBigramLM, SystemUnigramLM};
 
+/// k-best の1パス分の結果。分節パターンと真のパスコスト（BOSからEOSまでの累積コスト）を保持する。
+#[derive(Debug)]
+pub struct KBestPath {
+    /// 各文節の漢字候補リスト
+    pub segments: Vec<Vec<Candidate>>,
+    /// BOSからEOSまでの真の累積コスト（前向きDPで計算された値）
+    pub cost: f32,
+}
+
 /**
  * Segmenter により分割されたかな表現から、グラフを構築する。
  */
@@ -33,17 +42,21 @@ impl GraphResolver {
         lattice: &LatticeGraph<U, B>,
     ) -> anyhow::Result<Vec<Vec<Candidate>>> {
         let paths = self.resolve_k_best(lattice, 1)?;
-        Ok(paths.into_iter().next().unwrap_or_default())
+        Ok(paths
+            .into_iter()
+            .next()
+            .map(|p| p.segments)
+            .unwrap_or_default())
     }
 
     /// k-best ビタビアルゴリズムで上位 k 個の分節パターンを返す。
     ///
-    /// 戻り値: `Vec<Vec<Vec<Candidate>>>` — 外側がパス（分節パターン）、中が文節、内が漢字候補
+    /// 戻り値: `Vec<KBestPath>` — 各パスは分節パターン（文節×漢字候補）と真のパスコストを持つ。
     pub fn resolve_k_best<U: SystemUnigramLM, B: SystemBigramLM>(
         &self,
         lattice: &LatticeGraph<U, B>,
         k: usize,
-    ) -> anyhow::Result<Vec<Vec<Vec<Candidate>>>> {
+    ) -> anyhow::Result<Vec<KBestPath>> {
         let yomi = &lattice.yomi;
         // 各ノードに対して上位 k 個のエントリを保持する
         let mut kbest_map: HashMap<&WordNode, Vec<KBestEntry>> = HashMap::new();
@@ -138,11 +151,12 @@ impl GraphResolver {
             .get(eos)
             .with_context(|| format!("k-best entries not found for EOS at position {}", eos_pos))?;
 
-        let mut all_paths: Vec<Vec<Vec<Candidate>>> = Vec::new();
+        let mut all_paths: Vec<KBestPath> = Vec::new();
         let mut seen_patterns: HashSet<Vec<(i32, usize)>> = HashSet::new();
 
         for eos_entry in eos_entries {
             let mut path: Vec<Vec<Candidate>> = Vec::new();
+            let path_cost = eos_entry.cost; // EOS エントリの累積コスト = 真のパスコスト
             let mut cur_node = eos_entry.prev_node;
             let mut cur_rank = eos_entry.prev_rank;
 
@@ -183,13 +197,19 @@ impl GraphResolver {
 
             if !seen_patterns.contains(&pattern) {
                 seen_patterns.insert(pattern);
-                all_paths.push(path);
+                all_paths.push(KBestPath {
+                    segments: path,
+                    cost: path_cost,
+                });
             }
         }
 
         if all_paths.is_empty() {
             // 最低限 1 パスは返す
-            all_paths.push(Vec::new());
+            all_paths.push(KBestPath {
+                segments: Vec::new(),
+                cost: 0.0,
+            });
         }
 
         Ok(all_paths)
@@ -882,7 +902,7 @@ mod tests {
         assert!(!paths.is_empty());
 
         // 分節パターンの数を収集（各パスの clause 数）
-        let clause_counts: Vec<usize> = paths.iter().map(|p| p.len()).collect();
+        let clause_counts: Vec<usize> = paths.iter().map(|p| p.segments.len()).collect();
         info!("k-best clause counts: {:?}", clause_counts);
 
         // 複数パスが返る場合、異なる分節パターンが含まれることを確認
@@ -948,6 +968,7 @@ mod tests {
         let single_surfaces: Vec<String> =
             single_result.iter().map(|c| c[0].surface.clone()).collect();
         let kbest_surfaces: Vec<String> = k_best_result[0]
+            .segments
             .iter()
             .map(|c| c[0].surface.clone())
             .collect();
@@ -1006,7 +1027,7 @@ mod tests {
         assert!(!paths.is_empty());
 
         // 最初のパスは空でないこと
-        assert!(!paths[0].is_empty());
+        assert!(!paths[0].segments.is_empty());
 
         Ok(())
     }
