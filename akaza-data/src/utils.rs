@@ -33,10 +33,14 @@ pub fn get_file_list(src_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
     Ok(result)
 }
 
-/// 数字プレフィックスを `<NUM>` に正規化する。
+/// 数字+接尾辞トークンを `<NUM>` に正規化する。
+///
+/// 裸の数字（suffix なし）は正規化しない。全数字カウントが集約されると
+/// `<NUM>/<NUM>` のスコアが極端に高くなり、助詞「に」「さん」「ご」等が
+/// 数字に化ける退行を引き起こすため。
 ///
 /// - `"1匹/1ひき"` → `"<NUM>匹/<NUM>匹"`
-/// - `"1/1"` → `"<NUM>/<NUM>"`
+/// - `"1/1"` → `"1/1"` (変換なし — 裸の数字)
 /// - `"匹/ひき"` → `"匹/ひき"` (変換なし)
 pub fn normalize_num_token(word: &str) -> Cow<'_, str> {
     let Some(slash_pos) = word.find('/') else {
@@ -49,7 +53,8 @@ pub fn normalize_num_token(word: &str) -> Cow<'_, str> {
     }
     let suffix = &surface[digit_end..];
     if suffix.is_empty() {
-        Cow::Borrowed("<NUM>/<NUM>")
+        // 裸の数字は正規化しない
+        Cow::Borrowed(word)
     } else {
         Cow::Owned(format!("<NUM>{0}/<NUM>{0}", suffix))
     }
@@ -103,7 +108,8 @@ mod tests {
 
     #[test]
     fn test_normalize_num_token_digit_only() {
-        assert_eq!(normalize_num_token("1/1"), "<NUM>/<NUM>");
+        // 裸の数字は正規化しない（スコア集約による退行を防止）
+        assert_eq!(normalize_num_token("1/1"), "1/1");
     }
 
     #[test]
