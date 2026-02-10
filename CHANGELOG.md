@@ -1,5 +1,46 @@
 # Changelog
 
+## [v0.3.0](https://github.com/akaza-im/akaza/compare/v0.2.4...v0.3.0) - 2026-02-10
+- akaza-data check コマンドを改善 by @tokuhirom in https://github.com/akaza-im/akaza/pull/380
+- update deps by @tokuhirom in https://github.com/akaza-im/akaza/pull/383
+- wordcnt-unigram: homograph_hack / score_hack を除去 by @tokuhirom in https://github.com/akaza-im/akaza/pull/385
+- get_edge_cost のパフォーマンス改善 by @tokuhirom in https://github.com/akaza-im/akaza/pull/388
+- add tokenize-line subcommand by @tokuhirom in https://github.com/akaza-im/akaza/pull/390
+- use rsmarisa-0.3.0 for performance by @tokuhirom in https://github.com/akaza-im/akaza/pull/389
+- learn-corpus コマンドのコーパスファイル説明を README に追加 by @tokuhirom in https://github.com/akaza-im/akaza/pull/391
+- evaluate: [BAD] ログ行に入力の読みを追加 by @tokuhirom in https://github.com/akaza-im/akaza/pull/392
+- tokenize-line: stdin からの複数行入力に対応 by @tokuhirom in https://github.com/akaza-im/akaza/pull/393
+- evaluate: [BAD] ログを2行形式に簡潔化 by @tokuhirom in https://github.com/akaza-im/akaza/pull/394
+- check: stdin からの複数行入力に対応 by @tokuhirom in https://github.com/akaza-im/akaza/pull/395
+- README: かな漢字変換の仕組み・現状の制約・改善案を追記 by @tokuhirom in https://github.com/akaza-im/akaza/pull/396
+- segmenter: unwrap() を除去し空文字列でのクラッシュを防止 by @tokuhirom in https://github.com/akaza-im/akaza/pull/397
+- akaza-data tokenize のメモリアロケーション最適化 by @tokuhirom in https://github.com/akaza-im/akaza/pull/400
+- k-best ビタビを導入し Tab キーで分節パターンを切り替え可能に by @tokuhirom in https://github.com/akaza-im/akaza/pull/398
+- check: --k-best オプションで分節パターンを確認可能に by @tokuhirom in https://github.com/akaza-im/akaza/pull/401
+- k-best 分節パターンとサジェスト機能の導入 by @tokuhirom in https://github.com/akaza-im/akaza/pull/403
+- suggest 設定フラグを削除し、サジェストを常時有効化 by @tokuhirom in https://github.com/akaza-im/akaza/pull/404
+- rsmarisa を 0.4.0 に更新 by @tokuhirom in https://github.com/akaza-im/akaza/pull/405
+- README: 数字の動的変換の仕組みを追記 by @tokuhirom in https://github.com/akaza-im/akaza/pull/406
+- BOS/EOS bigram を導入し、文頭・文末の文脈情報を活用 by @tokuhirom in https://github.com/akaza-im/akaza/pull/407
+- akaza-data tokenize のメモリ確保を削減し高速化 by @tokuhirom in https://github.com/akaza-im/akaza/pull/408
+- wfreq のメモリ確保を削減し高速化 by @tokuhirom in https://github.com/akaza-im/akaza/pull/410
+- wordcnt-bigram の count_bigram を Vec 排除・1パス化で高速化 by @tokuhirom in https://github.com/akaza-im/akaza/pull/411
+- wfreq/wordcnt-bigram の HashMap を FxHashMap に切り替え by @tokuhirom in https://github.com/akaza-im/akaza/pull/412
+- evaluate: k-best スコアリングで BAD の重大度を分類 by @tokuhirom in https://github.com/akaza-im/akaza/pull/409
+- 変換パイプラインのアロケーション削減 by @tokuhirom in https://github.com/akaza-im/akaza/pull/413
+- 変換パイプラインの自明なアロケーション削減 by @tokuhirom in https://github.com/akaza-im/akaza/pull/414
+- evaluate: 全角数字を半角に正規化してから変換する by @tokuhirom in https://github.com/akaza-im/akaza/pull/415
+- evaluate: std::thread::scope でコーパス評価を並列化 by @tokuhirom in https://github.com/akaza-im/akaza/pull/416
+- wfreq: fold+reduce で逐次マージし OOM を防止 by @tokuhirom in https://github.com/akaza-im/akaza/pull/417
+- wfreq: redb でオンディスク集計し OOM を防止 by @tokuhirom in https://github.com/akaza-im/akaza/pull/418
+- wfreq: バッチ commit でトランザクションオーバーヘッドを削減 by @tokuhirom in https://github.com/akaza-im/akaza/pull/419
+- wfreq: 制御文字を含むワードのスキップ + parse_wfreq 堅牢化 by @tokuhirom in https://github.com/akaza-im/akaza/pull/420
+- wordcnt-bigram: redb でオンディスク集計し OOM を防止 by @tokuhirom in https://github.com/akaza-im/akaza/pull/421
+- vocab: wfreq パース時の unwrap panic を修正 by @tokuhirom in https://github.com/akaza-im/akaza/pull/422
+- vocab: 日本語文字を含まない surface をフィルタ by @tokuhirom in https://github.com/akaza-im/akaza/pull/423
+- k-best コスト表示バグ修正: 累積コストの二重カウントを解消 by @tokuhirom in https://github.com/akaza-im/akaza/pull/424
+- feat: コーパスソースの重み付け対応 (path:weight 形式) by @tokuhirom in https://github.com/akaza-im/akaza/pull/425
+
 ## [v0.2.3](https://github.com/akaza-im/akaza/compare/v0.2.2...v0.2.3) - 2026-02-05
 - Guard crash risks and stabilize cache tests by @tokuhirom in https://github.com/akaza-im/akaza/pull/361
 - AGENTS.md に cargo fmt 実行の注意を追記 by @tokuhirom in https://github.com/akaza-im/akaza/pull/362
