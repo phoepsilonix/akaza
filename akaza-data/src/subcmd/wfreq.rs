@@ -7,20 +7,23 @@ use log::{info, warn};
 use redb::{Database, ReadableTable, TableDefinition};
 use regex::Regex;
 
-use crate::utils::get_file_list;
+use crate::utils::{get_file_list, parse_dir_weight};
 
-const WFREQ_TABLE: TableDefinition<&str, u32> = TableDefinition::new("wfreq");
+const WFREQ_TABLE: TableDefinition<&str, f64> = TableDefinition::new("wfreq");
 
 /// 単語の発生確率を数え上げる。
 /// redb をオンディスク KV として使用し、大規模コーパスでも OOM しない。
+/// src_dirs は `"path:weight"` 形式に対応する（weight 省略時は 1.0）。
 pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
     info!("wfreq: {:?} => {}", src_dirs, dst_file);
 
-    let mut file_list: Vec<PathBuf> = Vec::new();
+    let mut file_list: Vec<(PathBuf, f64)> = Vec::new();
     for src_dir in src_dirs {
-        let list = get_file_list(Path::new(src_dir))?;
+        let (dir, weight) = parse_dir_weight(src_dir);
+        info!("Source: {} (weight={})", dir, weight);
+        let list = get_file_list(Path::new(&dir))?;
         for x in list {
-            file_list.push(x)
+            file_list.push((x, weight));
         }
     }
 
@@ -43,8 +46,8 @@ pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
         );
 
         // バッチ内の全ファイルをメモリ上で集計
-        let mut batch_stats: rustc_hash::FxHashMap<String, u32> = rustc_hash::FxHashMap::default();
-        for path_buf in chunk {
+        let mut batch_stats: rustc_hash::FxHashMap<String, f64> = rustc_hash::FxHashMap::default();
+        for (path_buf, weight) in chunk {
             info!("  Processing {}", path_buf.to_string_lossy());
             let file = File::open(path_buf)?;
             for line in BufReader::new(file).lines() {
@@ -62,7 +65,7 @@ pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
                     if word.bytes().any(|b| b.is_ascii_control()) {
                         continue;
                     }
-                    *batch_stats.entry(word.to_string()).or_insert(0) += 1;
+                    *batch_stats.entry(word.to_string()).or_insert(0.0) += weight;
                 }
             }
         }
@@ -72,7 +75,7 @@ pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
         {
             let mut table = write_txn.open_table(WFREQ_TABLE)?;
             for (word, cnt) in &batch_stats {
-                let prev = table.get(word.as_str())?.map(|v| v.value()).unwrap_or(0);
+                let prev = table.get(word.as_str())?.map(|v| v.value()).unwrap_or(0.0);
                 table.insert(word.as_str(), prev + cnt)?;
             }
         }
@@ -93,7 +96,11 @@ pub fn wfreq(src_dirs: &Vec<String>, dst_file: &str) -> anyhow::Result<()> {
     for entry in table.iter()? {
         let entry = entry?;
         let word = entry.0.value();
-        let cnt = entry.1.value();
+        let cnt_f64 = entry.1.value();
+        let cnt = cnt_f64.round() as u32;
+        if cnt == 0 {
+            continue;
+        }
         if re.is_match(word) {
             info!("Skip 2 character katakana entry: {}", word);
             continue;

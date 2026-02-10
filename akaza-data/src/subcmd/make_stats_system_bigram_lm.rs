@@ -12,12 +12,12 @@ use rustc_hash::FxHashMap;
 
 use libakaza::lm::base::{SystemBigramLM, SystemUnigramLM};
 
-use crate::utils::get_file_list;
+use crate::utils::{get_file_list, parse_dir_weight};
 use crate::wordcnt::wordcnt_bigram::{WordcntBigram, WordcntBigramBuilder};
 use crate::wordcnt::wordcnt_unigram::WordcntUnigram;
 
-/// redb テーブル: キーは (i32, i32) を 8 バイトにエンコード、値は u32
-const BIGRAM_TABLE: TableDefinition<&[u8], u32> = TableDefinition::new("bigram");
+/// redb テーブル: キーは (i32, i32) を 8 バイトにエンコード、値は f64（重み付き集計用）
+const BIGRAM_TABLE: TableDefinition<&[u8], f64> = TableDefinition::new("bigram");
 
 fn encode_key(id1: i32, id2: i32) -> [u8; 8] {
     let mut buf = [0u8; 8];
@@ -57,11 +57,14 @@ pub fn make_stats_system_bigram_lm(
         .collect::<FxHashMap<_, _>>();
 
     // 次に、コーパスをスキャンして bigram を読み取る。
-    let mut file_list: Vec<PathBuf> = Vec::new();
+    // corpus_dirs は "path:weight" 形式に対応する（weight 省略時は 1.0）。
+    let mut file_list: Vec<(PathBuf, f64)> = Vec::new();
     for corpus_dir in corpus_dirs {
-        let list = get_file_list(Path::new(corpus_dir))?;
+        let (dir, weight) = parse_dir_weight(corpus_dir);
+        info!("Corpus dir: {} (weight={})", dir, weight);
+        let list = get_file_list(Path::new(&dir))?;
         for x in list {
-            file_list.push(x)
+            file_list.push((x, weight));
         }
     }
 
@@ -85,9 +88,13 @@ pub fn make_stats_system_bigram_lm(
         );
 
         // バッチ内の全ファイルをメモリ上で集計
-        let mut batch_stats: FxHashMap<(i32, i32), u32> = FxHashMap::default();
-        for path_buf in chunk {
-            info!("  Counting {}", path_buf.to_string_lossy());
+        let mut batch_stats: FxHashMap<(i32, i32), f64> = FxHashMap::default();
+        for (path_buf, weight) in chunk {
+            info!(
+                "  Counting {} (weight={})",
+                path_buf.to_string_lossy(),
+                weight
+            );
             let file = File::open(path_buf)?;
 
             for line in BufReader::new(file).lines() {
@@ -106,7 +113,7 @@ pub fn make_stats_system_bigram_lm(
                     let cur_word_id = unigram_map.get(word).copied();
 
                     if let (Some(prev), Some(cur)) = (prev_word_id, cur_word_id) {
-                        *batch_stats.entry((prev, cur)).or_insert(0) += 1;
+                        *batch_stats.entry((prev, cur)).or_insert(0.0) += weight;
                     }
 
                     prev_word_id = cur_word_id;
@@ -119,7 +126,7 @@ pub fn make_stats_system_bigram_lm(
 
                 // 最後の単語 → EOS
                 if let (Some(last), Some(eos)) = (last_word_id, eos_id) {
-                    *batch_stats.entry((last, eos)).or_insert(0) += 1;
+                    *batch_stats.entry((last, eos)).or_insert(0.0) += weight;
                 }
             }
         }
@@ -130,7 +137,7 @@ pub fn make_stats_system_bigram_lm(
             let mut table = write_txn.open_table(BIGRAM_TABLE)?;
             for ((id1, id2), cnt) in &batch_stats {
                 let key = encode_key(*id1, *id2);
-                let prev = table.get(key.as_slice())?.map(|v| v.value()).unwrap_or(0);
+                let prev = table.get(key.as_slice())?.map(|v| v.value()).unwrap_or(0.0);
                 table.insert(key.as_slice(), prev + cnt)?;
             }
         }
@@ -154,7 +161,8 @@ pub fn make_stats_system_bigram_lm(
     for entry in table.iter()? {
         let entry = entry?;
         let (word_id1, word_id2) = decode_key(entry.0.value());
-        let cnt = entry.1.value();
+        let cnt_f64 = entry.1.value();
+        let cnt = cnt_f64.round() as u32;
 
         // dump (cnt > 16)
         if cnt > 16 {
