@@ -111,6 +111,10 @@ impl SystemSkipBigramLM for WordcntSkipBigram {
 
         None
     }
+
+    fn get_default_skip_cost(&self) -> f32 {
+        calc_cost(0, self.total_words, self.unique_words)
+    }
 }
 
 #[cfg(test)]
