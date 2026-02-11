@@ -8,6 +8,7 @@ use encoding_rs::UTF_8;
 use log::{debug, info};
 
 use crate::wordcnt::wordcnt_bigram::WordcntBigram;
+use crate::wordcnt::wordcnt_skip_bigram::WordcntSkipBigram;
 use crate::wordcnt::wordcnt_unigram::WordcntUnigram;
 use libakaza::corpus::{read_corpus_file, FullAnnotationCorpus};
 use libakaza::dict::skk::read::read_skkdict;
@@ -17,10 +18,12 @@ use libakaza::graph::segmenter::Segmenter;
 use libakaza::graph::word_node::{BOS_TOKEN_KEY, EOS_TOKEN_KEY};
 use libakaza::kana_kanji::hashmap_vec::HashmapVecKanaKanjiDict;
 use libakaza::kana_trie::cedarwood_kana_trie::CedarwoodKanaTrie;
-use libakaza::lm::base::{SystemBigramLM, SystemUnigramLM};
+use libakaza::lm::base::{SystemBigramLM, SystemSkipBigramLM, SystemUnigramLM};
 use libakaza::lm::on_memory::on_memory_system_bigram_lm::OnMemorySystemBigramLM;
+use libakaza::lm::on_memory::on_memory_system_skip_bigram_lm::OnMemorySystemSkipBigramLM;
 use libakaza::lm::on_memory::on_memory_system_unigram_lm::OnMemorySystemUnigramLM;
 use libakaza::lm::system_bigram::MarisaSystemBigramLMBuilder;
+use libakaza::lm::system_skip_bigram::MarisaSystemSkipBigramLMBuilder;
 use libakaza::lm::system_unigram_lm::{MarisaSystemUnigramLM, MarisaSystemUnigramLMBuilder};
 use libakaza::user_side_data::user_data::UserData;
 
@@ -30,10 +33,16 @@ struct LearningService {
     segmenter: Segmenter,
     system_unigram_lm: Rc<OnMemorySystemUnigramLM>,
     system_bigram_lm: Rc<OnMemorySystemBigramLM>,
+    system_skip_bigram_lm: Option<Rc<OnMemorySystemSkipBigramLM>>,
 }
 
 impl LearningService {
-    pub fn new(src_unigram: &str, src_bigram: &str, corpuses: &[&str]) -> anyhow::Result<Self> {
+    pub fn new(
+        src_unigram: &str,
+        src_bigram: &str,
+        src_skip_bigram: Option<&str>,
+        corpuses: &[&str],
+    ) -> anyhow::Result<Self> {
         let system_kana_kanji_dict = read_skkdict(Path::new("data/SKK-JISYO.akaza"), UTF_8)?;
         let all_yomis = system_kana_kanji_dict.keys().cloned().collect::<Vec<_>>();
         let system_kana_trie = CedarwoodKanaTrie::build(all_yomis);
@@ -81,6 +90,19 @@ impl LearningService {
             src_system_bigram_lm.unique_words,
         ));
 
+        let system_skip_bigram_lm = if let Some(skip_bigram_path) = src_skip_bigram {
+            info!("skip-bigram source file: {}", skip_bigram_path);
+            let src_skip_bigram_lm = WordcntSkipBigram::load(skip_bigram_path)?;
+            Some(Rc::new(OnMemorySystemSkipBigramLM::new(
+                Rc::new(RefCell::new(src_skip_bigram_lm.to_cnt_map())),
+                src_skip_bigram_lm.get_default_skip_cost(),
+                src_skip_bigram_lm.total_words,
+                src_skip_bigram_lm.unique_words,
+            )))
+        } else {
+            None
+        };
+
         let graph_builder = GraphBuilder::new(
             HashmapVecKanaKanjiDict::new(system_kana_kanji_dict),
             HashmapVecKanaKanjiDict::new(HashMap::default()),
@@ -94,6 +116,7 @@ impl LearningService {
             segmenter,
             system_unigram_lm,
             system_bigram_lm,
+            system_skip_bigram_lm,
         })
     }
 
@@ -171,6 +194,30 @@ impl LearningService {
                 }
             }
 
+            // learn skip-bigram
+            if let Some(skip_bigram_lm) = &self.system_skip_bigram_lm {
+                if teacher.nodes.len() > 2 {
+                    for i in 2..teacher.nodes.len() {
+                        let key1 = teacher.nodes[i - 2].key();
+                        let key2 = teacher.nodes[i].key();
+                        let Some((word_id1, _)) = self.system_unigram_lm.find(key1.as_str()) else {
+                            continue;
+                        };
+                        let Some((word_id2, _)) = self.system_unigram_lm.find(key2.as_str()) else {
+                            continue;
+                        };
+                        let v = skip_bigram_lm
+                            .get_skip_cnt(word_id1, word_id2)
+                            .unwrap_or(0_u32);
+                        info!(
+                            "Update skip-bigram cost: {}={},{}={}, v={}",
+                            key1, word_id1, key2, word_id2, v
+                        );
+                        skip_bigram_lm.update(word_id1, word_id2, v - delta);
+                    }
+                }
+            }
+
             // learn BOS/EOS bigram
             if !teacher.nodes.is_empty() {
                 // BOS → 最初の単語
@@ -225,6 +272,41 @@ impl LearningService {
         unigram_builder.set_total_words(self.system_unigram_lm.total_words);
         info!("Save unigram to {}", dst_unigram);
         unigram_builder.save(dst_unigram)?;
+        Ok(())
+    }
+
+    pub fn save_skip_bigram(&self, dst_unigram: &str, dst_skip_bigram: &str) -> anyhow::Result<()> {
+        let Some(skip_bigram_lm) = &self.system_skip_bigram_lm else {
+            return Ok(());
+        };
+
+        let new_unigram = MarisaSystemUnigramLM::load(dst_unigram)?;
+        let mut builder = MarisaSystemSkipBigramLMBuilder::default();
+        let srcmap = self.system_unigram_lm.as_hash_map();
+        let src_wordid2key = srcmap
+            .iter()
+            .map(|(key, (word_id, _))| (*word_id, key.to_string()))
+            .collect::<HashMap<i32, String>>();
+
+        for ((word_id1, word_id2), cost) in skip_bigram_lm.as_hash_map() {
+            let Some(word1) = src_wordid2key.get(&word_id1) else {
+                continue;
+            };
+            let Some(word2) = src_wordid2key.get(&word_id2) else {
+                continue;
+            };
+            let Some((new_word_id1, _)) = new_unigram.find(word1) else {
+                continue;
+            };
+            let Some((new_word_id2, _)) = new_unigram.find(word2) else {
+                continue;
+            };
+            builder.add(new_word_id1, new_word_id2, cost);
+        }
+
+        builder.set_default_skip_cost(skip_bigram_lm.get_default_skip_cost());
+        info!("Save skip-bigram to {}", dst_skip_bigram);
+        builder.save(dst_skip_bigram)?;
         Ok(())
     }
 
@@ -288,12 +370,15 @@ pub fn learn_corpus(
     must_corpus: &str,
     src_unigram: &str,
     src_bigram: &str,
+    src_skip_bigram: Option<&str>,
     dst_unigram: &str,
     dst_bigram: &str,
+    dst_skip_bigram: Option<&str>,
 ) -> anyhow::Result<()> {
     let service = LearningService::new(
         src_unigram,
         src_bigram,
+        src_skip_bigram,
         &[may_corpus, should_corpus, must_corpus],
     )?;
 
@@ -309,6 +394,9 @@ pub fn learn_corpus(
     // 保存していく
     service.save_unigram(dst_unigram)?;
     service.save_bigram(dst_unigram, dst_bigram)?;
+    if let Some(dst_skip) = dst_skip_bigram {
+        service.save_skip_bigram(dst_unigram, dst_skip)?;
+    }
 
     Ok(())
 }

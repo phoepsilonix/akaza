@@ -189,6 +189,12 @@ struct LearnCorpusArgs {
     src_bigram: String,
     dst_unigram: String,
     dst_bigram: String,
+    /// skip-bigram のソースファイル（省略時は skip-bigram 学習をスキップ）
+    #[arg(long)]
+    src_skip_bigram: Option<String>,
+    /// skip-bigram の出力ファイル（--src-skip-bigram 指定時は必須）
+    #[arg(long)]
+    dst_skip_bigram: Option<String>,
 }
 
 /// かな漢字変換を実行する（CLI テスト用）
@@ -374,8 +380,10 @@ fn main() -> anyhow::Result<()> {
             opts.must_corpus.as_str(),
             opts.src_unigram.as_str(),
             opts.src_bigram.as_str(),
+            opts.src_skip_bigram.as_deref(),
             opts.dst_unigram.as_str(),
             opts.dst_bigram.as_str(),
+            opts.dst_skip_bigram.as_deref(),
         ),
         Commands::Check(opt) => check(CheckOptions {
             yomi: opt.yomi,
