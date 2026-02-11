@@ -44,12 +44,14 @@ impl WordcntSkipBigramBuilder {
     }
 }
 
+#[allow(dead_code)]
 pub struct WordcntSkipBigram {
     trie: Trie,
     pub total_words: u32,
     pub unique_words: u32,
 }
 
+#[allow(dead_code)]
 impl WordcntSkipBigram {
     pub fn load(filename: &str) -> Result<WordcntSkipBigram> {
         info!("Loading system-skip-bigram: {}", filename);
