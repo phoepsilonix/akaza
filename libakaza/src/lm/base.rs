@@ -15,6 +15,9 @@ pub trait SystemUnigramLM {
 
 pub trait SystemSkipBigramLM {
     /// skip-bigram コストを返す（w_{i-2} と w_i のペア）。
-    /// 見つからなければ None（寄与なし）。
+    /// 見つからなければ None。
     fn get_skip_cost(&self, word_id1: i32, word_id2: i32) -> Option<f32>;
+
+    /// ペアが見つからなかった場合のデフォルトコスト。
+    fn get_default_skip_cost(&self) -> f32;
 }

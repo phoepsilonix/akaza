@@ -18,7 +18,7 @@ use crate::graph::segmenter::Segmenter;
 use crate::kana_kanji::base::KanaKanjiDict;
 use crate::kana_kanji::marisa_kana_kanji_dict::MarisaKanaKanjiDict;
 use crate::kana_trie::cedarwood_kana_trie::CedarwoodKanaTrie;
-use crate::lm::base::{SystemBigramLM, SystemUnigramLM};
+use crate::lm::base::{SystemBigramLM, SystemSkipBigramLM, SystemUnigramLM};
 use crate::lm::system_bigram::MarisaSystemBigramLM;
 use crate::lm::system_skip_bigram::MarisaSystemSkipBigramLM;
 use crate::lm::system_unigram_lm::MarisaSystemUnigramLM;
@@ -70,12 +70,7 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> HenkanEngine
     ) -> Result<Vec<KBestPath>> {
         let lattice = self.to_lattice(yomi, force_ranges)?;
         let mut paths = self.graph_resolver.resolve_k_best(&lattice, k)?;
-        // skip-bigram コストを計算
-        if let Some(skip_lm) = &self.skip_bigram_lm {
-            for path in paths.iter_mut() {
-                path.skip_bigram_cost = skip_lm.compute_path_cost(&path.word_ids);
-            }
-        }
+        // skip-bigram コストは Viterbi DP 内で計算済み（GraphResolver 経由）
         self.reranking_weights.rerank(&mut paths);
         Ok(paths)
     }
@@ -215,9 +210,14 @@ impl BigramWordViterbiEngineBuilder {
             Rc::new(system_bigram_lm),
         );
 
-        let graph_resolver = GraphResolver::default();
-
         let reranking_weights = self.config.reranking_weights.clone();
+
+        let graph_resolver = GraphResolver::new(
+            skip_bigram_lm
+                .clone()
+                .map(|lm| lm as Rc<dyn SystemSkipBigramLM>),
+            reranking_weights.skip_bigram_weight,
+        );
 
         Ok(BigramWordViterbiEngine {
             graph_builder,
