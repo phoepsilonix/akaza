@@ -8,6 +8,8 @@ enum OutputFormat {
     Json,
 }
 
+use libakaza::graph::reranking::ReRankingWeights;
+
 use crate::subcmd::bench::{bench, BenchOptions};
 use crate::subcmd::check::{check, CheckOptions};
 use crate::subcmd::dump_bigram_dict::dump_bigram_dict;
@@ -198,6 +200,15 @@ struct CheckArgs {
     /// k-best 分節パターン数（指定すると上位 k 個の分節パターンを表示）
     #[arg(short, long)]
     k_best: Option<usize>,
+    /// リランキング: 既知 bigram コストの重み
+    #[arg(long, default_value_t = 1.0)]
+    bigram_weight: f32,
+    /// リランキング: トークン長ペナルティの重み
+    #[arg(long, default_value_t = 0.0)]
+    length_weight: f32,
+    /// リランキング: 未知 bigram フォールバックコストの重み
+    #[arg(long, default_value_t = 1.0)]
+    unknown_bigram_weight: f32,
 }
 
 /// 変換精度を評価する
@@ -214,6 +225,15 @@ struct EvaluateArgs {
     /// k-best 評価（上位 k 個のパスに正解が含まれるか判定）
     #[arg(long, default_value_t = 5)]
     k_best: usize,
+    /// リランキング: 既知 bigram コストの重み
+    #[arg(long, default_value_t = 1.0)]
+    bigram_weight: f32,
+    /// リランキング: トークン長ペナルティの重み
+    #[arg(long, default_value_t = 0.0)]
+    length_weight: f32,
+    /// リランキング: 未知 bigram フォールバックコストの重み
+    #[arg(long, default_value_t = 1.0)]
+    unknown_bigram_weight: f32,
 }
 
 /// インクリメンタル変換のベンチマーク
@@ -323,6 +343,11 @@ fn main() -> anyhow::Result<()> {
             json_output: matches!(opt.format, OutputFormat::Json),
             num_candidates: opt.candidates,
             k_best: opt.k_best,
+            reranking_weights: ReRankingWeights {
+                bigram_weight: opt.bigram_weight,
+                length_weight: opt.length_weight,
+                unknown_bigram_weight: opt.unknown_bigram_weight,
+            },
         }),
         Commands::Evaluate(opt) => evaluate(
             &opt.corpus,
@@ -330,6 +355,11 @@ fn main() -> anyhow::Result<()> {
             &opt.utf8_dict,
             opt.model_dir,
             opt.k_best,
+            ReRankingWeights {
+                bigram_weight: opt.bigram_weight,
+                length_weight: opt.length_weight,
+                unknown_bigram_weight: opt.unknown_bigram_weight,
+            },
         ),
         Commands::Bench(opt) => bench(BenchOptions {
             corpus: &opt.corpus,

@@ -11,6 +11,7 @@ use libakaza::engine::bigram_word_viterbi_engine::{
 };
 use libakaza::graph::candidate::Candidate;
 use libakaza::graph::graph_resolver::KBestPath;
+use libakaza::graph::reranking::ReRankingWeights;
 use libakaza::kana_kanji::base::KanaKanjiDict;
 use libakaza::lm::base::{SystemBigramLM, SystemUnigramLM};
 use libakaza::user_side_data::user_data::UserData;
@@ -45,6 +46,7 @@ pub struct CheckOptions<'a> {
     pub json_output: bool,
     pub num_candidates: usize,
     pub k_best: Option<usize>,
+    pub reranking_weights: ReRankingWeights,
 }
 
 pub fn check(opts: CheckOptions) -> anyhow::Result<()> {
@@ -79,6 +81,9 @@ pub fn check(opts: CheckOptions) -> anyhow::Result<()> {
 
     // dict_cache を無効にする（開発用ツールなので）
     config.engine.dict_cache = false;
+
+    // リランキング重みを設定
+    config.engine.reranking_weights = opts.reranking_weights;
 
     let mut builder = BigramWordViterbiEngineBuilder::new(config.engine);
 
@@ -228,7 +233,18 @@ fn print_k_best_text(paths: &[KBestPath]) {
             .iter()
             .filter_map(|segment| segment.first().map(|c| c.surface_with_dynamic()))
             .collect();
-        println!("[{}] {} (cost: {:.4})", i + 1, text.join("/"), path.cost);
+        println!(
+            "[{}] {} (viterbi: {:.4}, rerank: {:.4}, uni: {:.4}, bi: {:.4}, unk_bi: {:.4}, unk_cnt: {}, tokens: {})",
+            i + 1,
+            text.join("/"),
+            path.viterbi_cost,
+            path.rerank_cost,
+            path.unigram_cost,
+            path.bigram_cost,
+            path.unknown_bigram_cost,
+            path.unknown_bigram_count,
+            path.token_count,
+        );
     }
 }
 
