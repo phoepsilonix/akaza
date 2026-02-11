@@ -13,6 +13,7 @@ use crate::graph::candidate::Candidate;
 use crate::graph::graph_builder::GraphBuilder;
 use crate::graph::graph_resolver::{GraphResolver, KBestPath};
 use crate::graph::lattice_graph::LatticeGraph;
+use crate::graph::reranking::ReRankingWeights;
 use crate::graph::segmenter::Segmenter;
 use crate::kana_kanji::base::KanaKanjiDict;
 use crate::kana_kanji::marisa_kana_kanji_dict::MarisaKanaKanjiDict;
@@ -29,6 +30,7 @@ pub struct BigramWordViterbiEngine<U: SystemUnigramLM, B: SystemBigramLM, KD: Ka
     pub segmenter: Segmenter,
     pub graph_resolver: GraphResolver,
     pub user_data: Arc<Mutex<UserData>>,
+    reranking_weights: ReRankingWeights,
 }
 
 impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> Debug
@@ -65,7 +67,9 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> HenkanEngine
         k: usize,
     ) -> Result<Vec<KBestPath>> {
         let lattice = self.to_lattice(yomi, force_ranges)?;
-        self.graph_resolver.resolve_k_best(&lattice, k)
+        let mut paths = self.graph_resolver.resolve_k_best(&lattice, k)?;
+        self.reranking_weights.rerank(&mut paths);
+        Ok(paths)
     }
 }
 
@@ -191,11 +195,14 @@ impl BigramWordViterbiEngineBuilder {
 
         let graph_resolver = GraphResolver::default();
 
+        let reranking_weights = self.config.reranking_weights.clone();
+
         Ok(BigramWordViterbiEngine {
             graph_builder,
             segmenter,
             graph_resolver,
             user_data,
+            reranking_weights,
         })
     }
 
