@@ -235,7 +235,7 @@ struct CheckArgs {
     #[arg(long, default_value_t = 1.0)]
     unknown_bigram_weight: f32,
     /// リランキング: skip-bigram コストの重み
-    #[arg(long, default_value_t = 0.0)]
+    #[arg(long, default_value_t = 0.2)]
     skip_bigram_weight: f32,
 }
 
@@ -263,7 +263,7 @@ struct EvaluateArgs {
     #[arg(long, default_value_t = 1.0)]
     unknown_bigram_weight: f32,
     /// リランキング: skip-bigram コストの重み
-    #[arg(long, default_value_t = 0.0)]
+    #[arg(long, default_value_t = 0.2)]
     skip_bigram_weight: f32,
 }
 
