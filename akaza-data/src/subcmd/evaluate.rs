@@ -165,11 +165,19 @@ pub fn evaluate(
                     let mut mismatches = Vec::new();
 
                     for (yomi, surface) in chunk {
-                        let result = engine.convert(yomi.as_str(), Some(&force_ranges))?;
-
-                        let terms: Vec<String> =
-                            result.iter().map(|f| f[0].surface.clone()).collect();
-                        let got = terms.join("");
+                        // convert_k_best でリランキング適用済みの結果を取得し、
+                        // 先頭パスを 1-best として使用する
+                        let k_results =
+                            engine.convert_k_best(yomi.as_str(), Some(&force_ranges), k_best)?;
+                        let got = k_results
+                            .first()
+                            .map(|p| {
+                                p.segments
+                                    .iter()
+                                    .map(|s| s[0].surface.clone())
+                                    .collect::<String>()
+                            })
+                            .unwrap_or_default();
 
                         saigen_ritsu.add(surface, &got);
 
@@ -177,7 +185,6 @@ pub fn evaluate(
                             info!("{} => (teacher={}, akaza={})", yomi, surface, got);
                             good_cnt += 1;
                         } else {
-                            let k_results = engine.convert_k_best(yomi.as_str(), None, k_best)?;
                             let in_topk = k_results.iter().any(|path| {
                                 let s: String = path
                                     .segments
