@@ -3,13 +3,12 @@ use serde::{Deserialize, Serialize};
 use super::graph_resolver::KBestPath;
 
 /// リランキング重み。
-/// デフォルト値では `rerank_cost == viterbi_cost` となり、従来と完全に同じ挙動になる。
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ReRankingWeights {
     // unigram_weight は 1.0 固定（基準スケール）
     /// 既知 bigram コストの重み（デフォルト 1.0）
     pub bigram_weight: f32,
-    /// トークン長ペナルティの重み（デフォルト 0.0）
+    /// トークン長ペナルティの重み（デフォルト 2.0）
     pub length_weight: f32,
     /// 未知 bigram フォールバックコストの重み（デフォルト 1.0）
     pub unknown_bigram_weight: f32,
@@ -19,7 +18,7 @@ impl Default for ReRankingWeights {
     fn default() -> Self {
         ReRankingWeights {
             bigram_weight: 1.0,
-            length_weight: 0.0,
+            length_weight: 2.0,
             unknown_bigram_weight: 1.0,
         }
     }
@@ -37,11 +36,9 @@ impl ReRankingWeights {
         paths.sort_by(|a, b| a.rerank_cost.partial_cmp(&b.rerank_cost).unwrap());
     }
 
-    /// デフォルト重みかどうか（= リランキングで順位が変わらない）
+    /// デフォルト重みかどうか
     pub fn is_default(&self) -> bool {
-        (self.bigram_weight - 1.0).abs() < f32::EPSILON
-            && self.length_weight.abs() < f32::EPSILON
-            && (self.unknown_bigram_weight - 1.0).abs() < f32::EPSILON
+        *self == Self::default()
     }
 }
 
@@ -71,7 +68,7 @@ mod tests {
     }
 
     #[test]
-    fn test_default_weights_preserve_viterbi_cost() {
+    fn test_default_weights_rerank_cost() {
         let weights = ReRankingWeights::default();
         let mut paths = vec![
             make_path(10.0, 3.0, 2.0, 5.0, 1, 3),
@@ -79,11 +76,12 @@ mod tests {
         ];
         weights.rerank(&mut paths);
 
-        // デフォルト重みでは rerank_cost == unigram + 1.0*bigram + 1.0*unknown + 0.0*token
-        // = unigram + bigram + unknown = viterbi_cost - (EOS edge etc を除けば同等)
-        // ただし viterbi_cost = unigram + bigram + unknown なので一致するはず
+        // デフォルト重みでは rerank_cost == unigram + 1.0*bigram + 1.0*unknown + 2.0*token
         for path in &paths {
-            let expected = path.unigram_cost + path.bigram_cost + path.unknown_bigram_cost;
+            let expected = path.unigram_cost
+                + path.bigram_cost
+                + path.unknown_bigram_cost
+                + 2.0 * path.token_count as f32;
             assert!(
                 (path.rerank_cost - expected).abs() < f32::EPSILON,
                 "rerank_cost={} expected={}",
