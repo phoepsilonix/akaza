@@ -14,8 +14,22 @@ use crate::lm::base::{SystemBigramLM, SystemUnigramLM};
 pub struct KBestPath {
     /// 各文節の漢字候補リスト
     pub segments: Vec<Vec<Candidate>>,
-    /// BOSからEOSまでの真の累積コスト（前向きDPで計算された値）
+    /// BOSからEOSまでの真の累積コスト（前向きDPで計算された値）。後方互換のため viterbi_cost と同値。
     pub cost: f32,
+    /// Viterbi DP の元コスト
+    pub viterbi_cost: f32,
+    /// Σ unigram コスト
+    pub unigram_cost: f32,
+    /// Σ 既知 bigram コスト
+    pub bigram_cost: f32,
+    /// Σ 未知 bigram フォールバックコスト
+    pub unknown_bigram_cost: f32,
+    /// 未知 bigram の回数
+    pub unknown_bigram_count: u32,
+    /// パス内のトークン数（BOS/EOS 除く）
+    pub token_count: u32,
+    /// リランキング後のスコア（ソートキー）
+    pub rerank_cost: f32,
 }
 
 /**
@@ -30,6 +44,12 @@ struct KBestEntry<'a> {
     cost: f32,
     prev_node: &'a WordNode,
     prev_rank: usize, // prev_node の k-best リストの何番目から来たか
+    // リランキング用の内訳
+    unigram_cost_sum: f32,
+    known_bigram_cost_sum: f32,
+    unknown_bigram_cost_sum: f32,
+    unknown_bigram_count: u32,
+    token_count: u32,
 }
 
 impl GraphResolver {
@@ -81,26 +101,53 @@ impl GraphResolver {
                 })?;
 
                 // 各前ノードの k-best エントリそれぞれについて候補を生成
+                let is_eos = node.surface == "__EOS__";
                 let mut entries: Vec<KBestEntry> = Vec::new();
                 for prev in prev_nodes {
-                    let edge_cost = lattice.get_edge_cost_with_user_data(prev, node, &user_data);
+                    let (edge_cost, is_known_bigram) =
+                        lattice.get_edge_cost_detail_with_user_data(prev, node, &user_data);
 
                     if let Some(prev_entries) = kbest_map.get(prev) {
                         for (rank, prev_entry) in prev_entries.iter().enumerate() {
                             let tmp_cost = prev_entry.cost + edge_cost + node_cost;
+                            let tmp_token_count =
+                                prev_entry.token_count + if is_eos { 0 } else { 1 };
+                            let (known_add, unknown_add, unknown_count_add) = if is_known_bigram {
+                                (edge_cost, 0.0, 0)
+                            } else {
+                                (0.0, edge_cost, 1)
+                            };
                             entries.push(KBestEntry {
                                 cost: tmp_cost,
                                 prev_node: prev,
                                 prev_rank: rank,
+                                unigram_cost_sum: prev_entry.unigram_cost_sum
+                                    + if is_eos { 0.0 } else { node_cost },
+                                known_bigram_cost_sum: prev_entry.known_bigram_cost_sum + known_add,
+                                unknown_bigram_cost_sum: prev_entry.unknown_bigram_cost_sum
+                                    + unknown_add,
+                                unknown_bigram_count: prev_entry.unknown_bigram_count
+                                    + unknown_count_add,
+                                token_count: tmp_token_count,
                             });
                         }
                     } else {
                         // BOS ノードなど: コスト 0 として扱う
                         let tmp_cost = edge_cost + node_cost;
+                        let (known_add, unknown_add, unknown_count_add) = if is_known_bigram {
+                            (edge_cost, 0.0, 0)
+                        } else {
+                            (0.0, edge_cost, 1)
+                        };
                         entries.push(KBestEntry {
                             cost: tmp_cost,
                             prev_node: prev,
                             prev_rank: 0,
+                            unigram_cost_sum: if is_eos { 0.0 } else { node_cost },
+                            known_bigram_cost_sum: known_add,
+                            unknown_bigram_cost_sum: unknown_add,
+                            unknown_bigram_count: unknown_count_add,
+                            token_count: if is_eos { 0 } else { 1 },
                         });
                     }
                 }
@@ -200,6 +247,13 @@ impl GraphResolver {
                 all_paths.push(KBestPath {
                     segments: path,
                     cost: path_cost,
+                    viterbi_cost: path_cost,
+                    unigram_cost: eos_entry.unigram_cost_sum,
+                    bigram_cost: eos_entry.known_bigram_cost_sum,
+                    unknown_bigram_cost: eos_entry.unknown_bigram_cost_sum,
+                    unknown_bigram_count: eos_entry.unknown_bigram_count,
+                    token_count: eos_entry.token_count,
+                    rerank_cost: path_cost,
                 });
             }
         }
@@ -209,6 +263,13 @@ impl GraphResolver {
             all_paths.push(KBestPath {
                 segments: Vec::new(),
                 cost: 0.0,
+                viterbi_cost: 0.0,
+                unigram_cost: 0.0,
+                bigram_cost: 0.0,
+                unknown_bigram_cost: 0.0,
+                unknown_bigram_count: 0,
+                token_count: 0,
+                rerank_cost: 0.0,
             });
         }
 

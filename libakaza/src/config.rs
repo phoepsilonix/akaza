@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use DictEncoding::Utf8;
 
 use crate::config::DictUsage::{Normal, SingleTerm};
+use crate::graph::reranking::ReRankingWeights;
 use crate::resource::detect_resource_path;
 
 #[derive(Debug, PartialEq, Serialize, Deserialize, Default)]
@@ -53,6 +54,7 @@ fn default_engine_config() -> EngineConfig {
         dicts: find_default_dicts(),
         dict_cache: true,
         model: default_model(),
+        reranking_weights: ReRankingWeights::default(),
     }
 }
 
@@ -143,6 +145,10 @@ pub struct EngineConfig {
     /// "default", etc.
     #[serde(default = "default_model")]
     pub model: String,
+
+    /// リランキング重み（省略時はデフォルト値 = 従来と同じ挙動）
+    #[serde(default)]
+    pub reranking_weights: ReRankingWeights,
 }
 
 fn default_dict_cache() -> bool {
