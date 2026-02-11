@@ -18,6 +18,7 @@ use crate::subcmd::evaluate::evaluate;
 use crate::subcmd::learn_corpus::learn_corpus;
 use crate::subcmd::make_dict::make_system_dict;
 use crate::subcmd::make_stats_system_bigram_lm::make_stats_system_bigram_lm;
+use crate::subcmd::make_stats_system_skip_bigram_lm::make_stats_system_skip_bigram_lm;
 use crate::subcmd::make_stats_system_unigram_lm::make_stats_system_unigram_lm;
 use crate::subcmd::tokenize::tokenize;
 use crate::subcmd::tokenize_line::tokenize_line;
@@ -60,6 +61,8 @@ enum Commands {
     WordcntUnigram(WordcntUnigramArgs),
     #[clap(arg_required_else_help = true)]
     WordcntBigram(WordcntBigramArgs),
+    #[clap(arg_required_else_help = true)]
+    WordcntSkipBigram(WordcntSkipBigramArgs),
 
     LearnCorpus(LearnCorpusArgs),
 
@@ -152,6 +155,17 @@ struct WordcntBigramArgs {
     bigram_trie_file: String,
 }
 
+/// skip-bigram 言語モデルを生成する。
+#[derive(Debug, clap::Args)]
+struct WordcntSkipBigramArgs {
+    #[arg(short, long)]
+    threshold: u32,
+    #[arg(long)]
+    corpus_dirs: Vec<String>,
+    unigram_trie_file: String,
+    skip_bigram_trie_file: String,
+}
+
 /// コーパスから言語モデルを学習する
 #[derive(Debug, clap::Args)]
 struct LearnCorpusArgs {
@@ -209,6 +223,9 @@ struct CheckArgs {
     /// リランキング: 未知 bigram フォールバックコストの重み
     #[arg(long, default_value_t = 1.0)]
     unknown_bigram_weight: f32,
+    /// リランキング: skip-bigram コストの重み
+    #[arg(long, default_value_t = 0.0)]
+    skip_bigram_weight: f32,
 }
 
 /// 変換精度を評価する
@@ -234,6 +251,9 @@ struct EvaluateArgs {
     /// リランキング: 未知 bigram フォールバックコストの重み
     #[arg(long, default_value_t = 1.0)]
     unknown_bigram_weight: f32,
+    /// リランキング: skip-bigram コストの重み
+    #[arg(long, default_value_t = 0.0)]
+    skip_bigram_weight: f32,
 }
 
 /// インクリメンタル変換のベンチマーク
@@ -317,6 +337,12 @@ fn main() -> anyhow::Result<()> {
             &opt.unigram_trie_file,
             &opt.bigram_trie_file,
         ),
+        Commands::WordcntSkipBigram(opt) => make_stats_system_skip_bigram_lm(
+            opt.threshold,
+            &opt.corpus_dirs,
+            &opt.unigram_trie_file,
+            &opt.skip_bigram_trie_file,
+        ),
         Commands::WordcntUnigram(opt) => {
             make_stats_system_unigram_lm(opt.src_file.as_str(), opt.dst_file.as_str())
         }
@@ -347,6 +373,7 @@ fn main() -> anyhow::Result<()> {
                 bigram_weight: opt.bigram_weight,
                 length_weight: opt.length_weight,
                 unknown_bigram_weight: opt.unknown_bigram_weight,
+                skip_bigram_weight: opt.skip_bigram_weight,
             },
         }),
         Commands::Evaluate(opt) => evaluate(
@@ -359,6 +386,7 @@ fn main() -> anyhow::Result<()> {
                 bigram_weight: opt.bigram_weight,
                 length_weight: opt.length_weight,
                 unknown_bigram_weight: opt.unknown_bigram_weight,
+                skip_bigram_weight: opt.skip_bigram_weight,
             },
         ),
         Commands::Bench(opt) => bench(BenchOptions {
