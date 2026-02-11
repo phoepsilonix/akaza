@@ -1,5 +1,10 @@
 # Changelog
 
+## [v0.4.0](https://github.com/akaza-im/akaza/compare/v0.3.0...v0.4.0) - 2026-02-11
+- feat: 数字トークンの <NUM> 正規化による LM スコア集約 by @tokuhirom in https://github.com/akaza-im/akaza/pull/426
+- fix: 裸の数字トークンを <NUM> 正規化から除外 by @tokuhirom in https://github.com/akaza-im/akaza/pull/428
+- docs: 数字トークンの <NUM> 正規化について README に追記 by @tokuhirom in https://github.com/akaza-im/akaza/pull/429
+
 ## [v0.3.0](https://github.com/akaza-im/akaza/compare/v0.2.4...v0.3.0) - 2026-02-10
 - akaza-data check コマンドを改善 by @tokuhirom in https://github.com/akaza-im/akaza/pull/380
 - update deps by @tokuhirom in https://github.com/akaza-im/akaza/pull/383
