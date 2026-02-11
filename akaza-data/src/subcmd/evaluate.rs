@@ -8,6 +8,7 @@ use log::info;
 use libakaza::config::{DictConfig, DictEncoding, DictType, DictUsage, EngineConfig};
 use libakaza::engine::base::HenkanEngine;
 use libakaza::engine::bigram_word_viterbi_engine::BigramWordViterbiEngineBuilder;
+use libakaza::graph::reranking::ReRankingWeights;
 
 #[derive(Default)]
 struct SaigenRitsu {
@@ -107,6 +108,7 @@ pub fn evaluate(
     utf8_dict: &Vec<String>,
     model_dir: String,
     k_best: usize,
+    reranking_weights: ReRankingWeights,
 ) -> anyhow::Result<()> {
     let mut dicts: Vec<DictConfig> = Vec::new();
     for path in eucjp_dict {
@@ -131,6 +133,7 @@ pub fn evaluate(
         dicts,
         model: model_dir,
         dict_cache: false,
+        reranking_weights,
     };
 
     // コーパスの全行を事前に読み込む

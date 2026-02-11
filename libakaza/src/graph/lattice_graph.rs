@@ -183,6 +183,31 @@ impl<U: SystemUnigramLM, B: SystemBigramLM> LatticeGraph<U, B> {
         }
     }
 
+    /// エッジコストと既知 bigram かどうかを返す。
+    /// リランキング用にコスト内訳を追跡するために使用する。
+    pub(crate) fn get_edge_cost_detail_with_user_data(
+        &self,
+        prev: &WordNode,
+        node: &WordNode,
+        user_data: &UserData,
+    ) -> (f32, bool) {
+        if let Some(cost) = user_data.get_bigram_cost(prev, node) {
+            return (cost, true);
+        }
+
+        let Some((prev_id, _)) = prev.word_id_and_score else {
+            return (self.system_bigram_lm.get_default_edge_cost(), false);
+        };
+        let Some((node_id, _)) = node.word_id_and_score else {
+            return (self.system_bigram_lm.get_default_edge_cost(), false);
+        };
+        if let Some(cost) = self.system_bigram_lm.get_edge_cost(prev_id, node_id) {
+            (cost, true)
+        } else {
+            (self.system_bigram_lm.get_default_edge_cost(), false)
+        }
+    }
+
     pub fn get_default_edge_cost(&self) -> f32 {
         self.system_bigram_lm.get_default_edge_cost()
     }
