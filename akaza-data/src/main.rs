@@ -12,6 +12,7 @@ use libakaza::graph::reranking::ReRankingWeights;
 
 use crate::subcmd::bench::{bench, BenchOptions};
 use crate::subcmd::check::{check, CheckOptions};
+use crate::subcmd::convert_skip_bigram_model::convert_skip_bigram_model;
 use crate::subcmd::dump_bigram_dict::dump_bigram_dict;
 use crate::subcmd::dump_unigram_dict::dump_unigram_dict;
 use crate::subcmd::evaluate::evaluate;
@@ -75,6 +76,10 @@ enum Commands {
 
     DumpUnigramDict(DumpUnigramDictArgs),
     DumpBigramDict(DumpBigramDictArgs),
+
+    /// wordcnt skip-bigram trie → skip_bigram.model に変換
+    #[clap(arg_required_else_help = true)]
+    ConvertSkipBigramModel(ConvertSkipBigramModelArgs),
 }
 
 /// コーパスを形態素解析機でトーカナイズする
@@ -289,6 +294,19 @@ struct DumpBigramDictArgs {
     bigram_file: String,
 }
 
+/// wordcnt skip-bigram trie を skip_bigram.model に変換する
+#[derive(Debug, clap::Args)]
+struct ConvertSkipBigramModelArgs {
+    /// 入力: wordcnt skip-bigram trie ファイル
+    src_skip_bigram: String,
+    /// 入力: wordcnt unigram trie ファイル（旧 word_id のソース）
+    src_wordcnt_unigram: String,
+    /// 入力: unigram.model ファイル（新 word_id のソース）
+    dst_unigram_model: String,
+    /// 出力: skip_bigram.model ファイル
+    dst: String,
+}
+
 fn main() -> anyhow::Result<()> {
     let args = Args::parse();
 
@@ -401,5 +419,11 @@ fn main() -> anyhow::Result<()> {
         Commands::DumpBigramDict(opt) => {
             dump_bigram_dict(opt.unigram_file.as_str(), opt.bigram_file.as_str())
         }
+        Commands::ConvertSkipBigramModel(opt) => convert_skip_bigram_model(
+            opt.src_skip_bigram.as_str(),
+            opt.src_wordcnt_unigram.as_str(),
+            opt.dst_unigram_model.as_str(),
+            opt.dst.as_str(),
+        ),
     }
 }

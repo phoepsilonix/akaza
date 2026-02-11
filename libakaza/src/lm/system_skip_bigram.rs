@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use half::f16;
 use log::info;
 
@@ -11,6 +11,8 @@ use crate::lm::base::SystemSkipBigramLM;
    {word2 ID}    # 3 bytes (w_i)
    packed float  # score: 2 bytes (f16)
 */
+
+const DEFAULT_COST_KEY: &str = "__DEFAULT_SKIP_COST__";
 
 /// skip-bigram 言語モデルのビルダー。
 /// bigram LM と同一キー形式 `[3B id1][3B id2][2B f16_score]` を使用。
@@ -41,10 +43,20 @@ impl MarisaSystemSkipBigramLMBuilder {
         self.keyset.push_back_bytes(&key, 1.0).unwrap();
     }
 
+    pub fn set_default_skip_cost(&mut self, cost: f32) -> &mut Self {
+        let key = format!("{DEFAULT_COST_KEY}\t{cost}");
+        self.keyset.push_back_str(&key).unwrap();
+        self
+    }
+
     pub fn build(&mut self) -> Result<MarisaSystemSkipBigramLM> {
         let mut trie = Trie::new();
         trie.build(&mut self.keyset, 0);
-        Ok(MarisaSystemSkipBigramLM { trie })
+        let default_skip_cost = MarisaSystemSkipBigramLM::read_default_skip_cost(&trie)?;
+        Ok(MarisaSystemSkipBigramLM {
+            trie,
+            default_skip_cost,
+        })
     }
 
     pub fn save(&mut self, ofname: &str) -> Result<()> {
@@ -57,6 +69,7 @@ impl MarisaSystemSkipBigramLMBuilder {
 
 pub struct MarisaSystemSkipBigramLM {
     trie: Trie,
+    default_skip_cost: f32,
 }
 
 impl MarisaSystemSkipBigramLM {
@@ -64,21 +77,29 @@ impl MarisaSystemSkipBigramLM {
         info!("Loading system-skip-bigram: {}", filename);
         let mut trie = Trie::new();
         trie.load(filename)?;
-        Ok(MarisaSystemSkipBigramLM { trie })
+        let default_skip_cost = Self::read_default_skip_cost(&trie).unwrap_or_else(|_| {
+            info!("No default skip cost in model, using fallback 10.0");
+            10.0
+        });
+        info!("  default_skip_cost={}", default_skip_cost);
+        Ok(MarisaSystemSkipBigramLM {
+            trie,
+            default_skip_cost,
+        })
     }
 
-    /// パス上の word_id 列から skip-bigram コストの合計を計算する。
-    /// skip-bigram は w_{i-2} と w_i のペア。
-    pub fn compute_path_cost(&self, word_ids: &[Option<i32>]) -> f32 {
-        let mut total = 0.0_f32;
-        for i in 2..word_ids.len() {
-            if let (Some(id1), Some(id2)) = (word_ids[i - 2], word_ids[i]) {
-                if let Some(cost) = self.get_skip_cost(id1, id2) {
-                    total += cost;
-                }
+    fn read_default_skip_cost(trie: &Trie) -> Result<f32> {
+        let mut agent = Agent::new();
+        agent.set_query_str(DEFAULT_COST_KEY);
+
+        if trie.predictive_search(&mut agent) {
+            let key = agent.key().as_str();
+            if let Some((_, score)) = key.split_once('\t') {
+                return Ok(score.parse::<f32>()?);
             }
         }
-        total
+
+        bail!("Cannot read default skip cost from skip-bigram trie");
     }
 }
 
@@ -113,6 +134,10 @@ impl SystemSkipBigramLM for MarisaSystemSkipBigramLM {
 
         None
     }
+
+    fn get_default_skip_cost(&self) -> f32 {
+        self.default_skip_cost
+    }
 }
 
 #[cfg(test)]
@@ -124,6 +149,7 @@ mod tests {
         let mut builder = MarisaSystemSkipBigramLMBuilder::default();
         builder.add(100, 200, 3.5);
         builder.add(100, 300, 4.0);
+        builder.set_default_skip_cost(10.0);
         let lm = builder.build()?;
 
         let cost = lm.get_skip_cost(100, 200).unwrap();
@@ -133,32 +159,20 @@ mod tests {
         assert!(3.9 < cost && cost < 4.1);
 
         assert!(lm.get_skip_cost(999, 888).is_none());
+        assert!((lm.get_default_skip_cost() - 10.0).abs() < f32::EPSILON);
         Ok(())
     }
 
     #[test]
-    fn compute_path_cost_basic() -> anyhow::Result<()> {
+    fn default_cost_fallback() -> anyhow::Result<()> {
+        // デフォルトコスト未設定の古いモデル → フォールバック値 10.0
         let mut builder = MarisaSystemSkipBigramLMBuilder::default();
-        builder.add(1, 3, 2.0);
-        let lm = builder.build()?;
-
-        // word_ids: [Some(1), Some(2), Some(3)]
-        // skip-bigram: (1, 3) at i=2
-        let cost = lm.compute_path_cost(&[Some(1), Some(2), Some(3)]);
-        assert!(1.9 < cost && cost < 2.1);
-
-        // 見つからないペアは寄与なし
-        let cost = lm.compute_path_cost(&[Some(10), Some(20), Some(30)]);
-        assert_eq!(cost, 0.0);
-
-        // None が含まれる場合はスキップ
-        let cost = lm.compute_path_cost(&[Some(1), None, Some(3)]);
-        assert!(1.9 < cost && cost < 2.1);
-
-        // 短いパスでは skip-bigram なし
-        let cost = lm.compute_path_cost(&[Some(1), Some(3)]);
-        assert_eq!(cost, 0.0);
-
+        builder.add(1, 2, 5.0);
+        // set_default_skip_cost を呼ばない
+        let mut trie = Trie::new();
+        trie.build(&mut builder.keyset, 0);
+        let result = MarisaSystemSkipBigramLM::read_default_skip_cost(&trie);
+        assert!(result.is_err());
         Ok(())
     }
 }

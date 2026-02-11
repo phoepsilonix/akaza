@@ -1,5 +1,6 @@
 pub mod bench;
 pub mod check;
+pub mod convert_skip_bigram_model;
 pub mod dump_bigram_dict;
 pub mod dump_unigram_dict;
 pub mod evaluate;

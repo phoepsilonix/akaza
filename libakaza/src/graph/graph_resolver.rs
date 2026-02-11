@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::rc::Rc;
 
 use anyhow::{bail, Context};
 use log::{error, info, trace};
@@ -7,7 +8,7 @@ use log::{error, info, trace};
 use crate::graph::candidate::Candidate;
 use crate::graph::lattice_graph::LatticeGraph;
 use crate::graph::word_node::WordNode;
-use crate::lm::base::{SystemBigramLM, SystemUnigramLM};
+use crate::lm::base::{SystemBigramLM, SystemSkipBigramLM, SystemUnigramLM};
 
 /// k-best の1パス分の結果。分節パターンと真のパスコスト（BOSからEOSまでの累積コスト）を保持する。
 #[derive(Debug)]
@@ -39,8 +40,21 @@ pub struct KBestPath {
 /**
  * Segmenter により分割されたかな表現から、グラフを構築する。
  */
-#[derive(Default)]
-pub struct GraphResolver {}
+pub struct GraphResolver {
+    /// skip-bigram 言語モデル（Optional）
+    skip_bigram_lm: Option<Rc<dyn SystemSkipBigramLM>>,
+    /// skip-bigram コストの重み（Viterbi DP に加算）
+    skip_bigram_weight: f32,
+}
+
+impl Default for GraphResolver {
+    fn default() -> Self {
+        Self {
+            skip_bigram_lm: None,
+            skip_bigram_weight: 0.0,
+        }
+    }
+}
 
 /// k-best のエントリ。各ノードにおいて上位 k 個の経路を保持するために使う。
 #[derive(Debug, Clone)]
@@ -54,9 +68,37 @@ struct KBestEntry<'a> {
     unknown_bigram_cost_sum: f32,
     unknown_bigram_count: u32,
     token_count: u32,
+    /// Σ skip-bigram コスト（重み適用前の生値）
+    skip_bigram_cost_sum: f32,
 }
 
 impl GraphResolver {
+    pub fn new(
+        skip_bigram_lm: Option<Rc<dyn SystemSkipBigramLM>>,
+        skip_bigram_weight: f32,
+    ) -> Self {
+        Self {
+            skip_bigram_lm,
+            skip_bigram_weight,
+        }
+    }
+
+    /// 祖父ノード (w_{i-2}) と現在ノード (w_i) の skip-bigram コストを返す。
+    /// ヒット時はそのコスト、ミス時はデフォルトコスト（高コスト = ペナルティ）。
+    /// LM が未設定または word_id がない場合は 0.0。
+    fn skip_bigram_cost(&self, grandparent: &WordNode, node: &WordNode) -> f32 {
+        if let Some(skip_lm) = &self.skip_bigram_lm {
+            if let (Some((gp_id, _)), Some((node_id, _))) =
+                (grandparent.word_id_and_score, node.word_id_and_score)
+            {
+                return skip_lm
+                    .get_skip_cost(gp_id, node_id)
+                    .unwrap_or_else(|| skip_lm.get_default_skip_cost());
+            }
+        }
+        0.0
+    }
+
     /**
      * ビタビアルゴリズムで最適な経路を見つける。
      * k=1 の resolve_k_best に委譲する。
@@ -113,7 +155,14 @@ impl GraphResolver {
 
                     if let Some(prev_entries) = kbest_map.get(prev) {
                         for (rank, prev_entry) in prev_entries.iter().enumerate() {
-                            let tmp_cost = prev_entry.cost + edge_cost + node_cost;
+                            // skip-bigram: 祖父ノード (prev_entry.prev_node) と現在ノード (node)
+                            let skip_cost = if !is_eos {
+                                self.skip_bigram_cost(prev_entry.prev_node, node)
+                            } else {
+                                0.0
+                            };
+                            let weighted_skip = self.skip_bigram_weight * skip_cost;
+                            let tmp_cost = prev_entry.cost + edge_cost + node_cost + weighted_skip;
                             let tmp_token_count =
                                 prev_entry.token_count + if is_eos { 0 } else { 1 };
                             let (known_add, unknown_add, unknown_count_add) = if is_known_bigram {
@@ -133,10 +182,11 @@ impl GraphResolver {
                                 unknown_bigram_count: prev_entry.unknown_bigram_count
                                     + unknown_count_add,
                                 token_count: tmp_token_count,
+                                skip_bigram_cost_sum: prev_entry.skip_bigram_cost_sum + skip_cost,
                             });
                         }
                     } else {
-                        // BOS ノードなど: コスト 0 として扱う
+                        // BOS ノードなど: コスト 0 として扱う（skip-bigram 対象外）
                         let tmp_cost = edge_cost + node_cost;
                         let (known_add, unknown_add, unknown_count_add) = if is_known_bigram {
                             (edge_cost, 0.0, 0)
@@ -152,6 +202,7 @@ impl GraphResolver {
                             unknown_bigram_cost_sum: unknown_add,
                             unknown_bigram_count: unknown_count_add,
                             token_count: if is_eos { 0 } else { 1 },
+                            skip_bigram_cost_sum: 0.0,
                         });
                     }
                 }
@@ -262,7 +313,7 @@ impl GraphResolver {
                     token_count: eos_entry.token_count,
                     rerank_cost: path_cost,
                     word_ids,
-                    skip_bigram_cost: 0.0,
+                    skip_bigram_cost: eos_entry.skip_bigram_cost_sum,
                 });
             }
         }

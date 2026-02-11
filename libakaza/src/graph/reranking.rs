@@ -23,7 +23,7 @@ impl Default for ReRankingWeights {
             bigram_weight: 1.0,
             length_weight: 2.0,
             unknown_bigram_weight: 1.0,
-            skip_bigram_weight: 0.0,
+            skip_bigram_weight: 0.2,
         }
     }
 }
