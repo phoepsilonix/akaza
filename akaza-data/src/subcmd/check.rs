@@ -6,6 +6,7 @@ use log::{error, info};
 use serde::Serialize;
 
 use libakaza::config::{Config, DictConfig, DictEncoding, DictType, DictUsage};
+use libakaza::engine::base::HenkanEngine;
 use libakaza::engine::bigram_word_viterbi_engine::{
     BigramWordViterbiEngine, BigramWordViterbiEngineBuilder,
 };
@@ -144,10 +145,9 @@ fn check_one_line<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict>(
     num_candidates: usize,
     k_best: Option<usize>,
 ) -> anyhow::Result<()> {
-    let lattice = engine.to_lattice(yomi, None)?;
-
     // DOT グラフ出力（expected が指定された場合）
     if let Some(expected) = expected {
+        let lattice = engine.to_lattice(yomi, None)?;
         let dot = lattice.dump_cost_dot(expected.as_str());
         println!("{dot}");
         let mut file = File::create("/tmp/dump.dot")?;
@@ -155,8 +155,8 @@ fn check_one_line<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict>(
     }
 
     if let Some(k) = k_best {
-        // k-best モード: 上位 k 個の分節パターンを表示
-        let paths = engine.graph_resolver.resolve_k_best(&lattice, k)?;
+        // k-best モード: 上位 k 個の分節パターンを表示（リランキング適用済み）
+        let paths = engine.convert_k_best(yomi, None, k)?;
 
         if json_output {
             print_k_best_json(yomi, &paths, num_candidates)?;
@@ -164,6 +164,7 @@ fn check_one_line<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict>(
             print_k_best_text(&paths);
         }
     } else {
+        let lattice = engine.to_lattice(yomi, None)?;
         let mut result = engine.resolve(&lattice)?;
 
         // 候補数を制限する
