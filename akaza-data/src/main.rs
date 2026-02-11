@@ -204,7 +204,7 @@ struct CheckArgs {
     #[arg(long, default_value_t = 1.0)]
     bigram_weight: f32,
     /// リランキング: トークン長ペナルティの重み
-    #[arg(long, default_value_t = 0.0)]
+    #[arg(long, default_value_t = 2.0)]
     length_weight: f32,
     /// リランキング: 未知 bigram フォールバックコストの重み
     #[arg(long, default_value_t = 1.0)]
@@ -229,7 +229,7 @@ struct EvaluateArgs {
     #[arg(long, default_value_t = 1.0)]
     bigram_weight: f32,
     /// リランキング: トークン長ペナルティの重み
-    #[arg(long, default_value_t = 0.0)]
+    #[arg(long, default_value_t = 2.0)]
     length_weight: f32,
     /// リランキング: 未知 bigram フォールバックコストの重み
     #[arg(long, default_value_t = 1.0)]
