@@ -30,6 +30,10 @@ pub struct KBestPath {
     pub token_count: u32,
     /// リランキング後のスコア（ソートキー）
     pub rerank_cost: f32,
+    /// パス上の各ノードの word_id（BOS/EOS 除く、先頭→末尾順）
+    pub word_ids: Vec<Option<i32>>,
+    /// Σ skip-bigram コスト（リランキング用、エンジン側で計算）
+    pub skip_bigram_cost: f32,
 }
 
 /**
@@ -203,6 +207,7 @@ impl GraphResolver {
 
         for eos_entry in eos_entries {
             let mut path: Vec<Vec<Candidate>> = Vec::new();
+            let mut word_ids: Vec<Option<i32>> = Vec::new();
             let path_cost = eos_entry.cost; // EOS エントリの累積コスト = 真のパスコスト
             let mut cur_node = eos_entry.prev_node;
             let mut cur_rank = eos_entry.prev_rank;
@@ -212,6 +217,7 @@ impl GraphResolver {
                     let end_pos = cur_node.start_pos + (cur_node.yomi.len() as i32);
                     let candidates = self.get_candidates(cur_node, lattice, &costmap, end_pos);
                     path.push(candidates);
+                    word_ids.push(cur_node.word_id_and_score.map(|(id, _)| id));
                 }
 
                 // cur_node の kbest_map から cur_rank 番目のエントリを辿る
@@ -233,6 +239,7 @@ impl GraphResolver {
                 cur_rank = entry.prev_rank;
             }
             path.reverse();
+            word_ids.reverse();
 
             // 重複排除: 分節パターン（各文節の (start_pos, yomi_len)）でハッシュ
             let pattern: Vec<(i32, usize)> = path
@@ -254,6 +261,8 @@ impl GraphResolver {
                     unknown_bigram_count: eos_entry.unknown_bigram_count,
                     token_count: eos_entry.token_count,
                     rerank_cost: path_cost,
+                    word_ids,
+                    skip_bigram_cost: 0.0,
                 });
             }
         }
@@ -270,6 +279,8 @@ impl GraphResolver {
                 unknown_bigram_count: 0,
                 token_count: 0,
                 rerank_cost: 0.0,
+                word_ids: Vec::new(),
+                skip_bigram_cost: 0.0,
             });
         }
 
