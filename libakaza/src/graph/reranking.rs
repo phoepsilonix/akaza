@@ -12,6 +12,9 @@ pub struct ReRankingWeights {
     pub length_weight: f32,
     /// 未知 bigram フォールバックコストの重み（デフォルト 1.0）
     pub unknown_bigram_weight: f32,
+    /// skip-bigram コストの重み（デフォルト 0.0 = 無効）
+    #[serde(default)]
+    pub skip_bigram_weight: f32,
 }
 
 impl Default for ReRankingWeights {
@@ -20,6 +23,7 @@ impl Default for ReRankingWeights {
             bigram_weight: 1.0,
             length_weight: 2.0,
             unknown_bigram_weight: 1.0,
+            skip_bigram_weight: 0.0,
         }
     }
 }
@@ -31,7 +35,8 @@ impl ReRankingWeights {
             path.rerank_cost = path.unigram_cost
                 + self.bigram_weight * path.bigram_cost
                 + self.unknown_bigram_weight * path.unknown_bigram_cost
-                + self.length_weight * path.token_count as f32;
+                + self.length_weight * path.token_count as f32
+                + self.skip_bigram_weight * path.skip_bigram_cost;
         }
         paths.sort_by(|a, b| a.rerank_cost.partial_cmp(&b.rerank_cost).unwrap());
     }
@@ -64,6 +69,8 @@ mod tests {
             unknown_bigram_count,
             token_count,
             rerank_cost: viterbi_cost,
+            word_ids: Vec::new(),
+            skip_bigram_cost: 0.0,
         }
     }
 
@@ -97,6 +104,7 @@ mod tests {
             bigram_weight: 0.5,
             length_weight: 0.0,
             unknown_bigram_weight: 0.1,
+            skip_bigram_weight: 0.0,
         };
 
         // path A: unigram=3, bigram=2, unknown=10 → 3 + 0.5*2 + 0.1*10 = 5.0
@@ -117,6 +125,7 @@ mod tests {
             bigram_weight: 1.0,
             length_weight: 2.0,
             unknown_bigram_weight: 1.0,
+            skip_bigram_weight: 0.0,
         };
 
         // path A: unigram=3, bigram=2, unknown=1, tokens=5 → 3+2+1+2*5 = 16
@@ -138,6 +147,7 @@ mod tests {
             bigram_weight: 0.5,
             length_weight: 0.0,
             unknown_bigram_weight: 1.0,
+            skip_bigram_weight: 0.0,
         }
         .is_default());
     }

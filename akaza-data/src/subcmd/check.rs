@@ -235,7 +235,7 @@ fn print_k_best_text(paths: &[KBestPath]) {
             .filter_map(|segment| segment.first().map(|c| c.surface_with_dynamic()))
             .collect();
         println!(
-            "[{}] {} (viterbi: {:.4}, rerank: {:.4}, uni: {:.4}, bi: {:.4}, unk_bi: {:.4}, unk_cnt: {}, tokens: {})",
+            "[{}] {} (viterbi: {:.4}, rerank: {:.4}, uni: {:.4}, bi: {:.4}, unk_bi: {:.4}, unk_cnt: {}, tokens: {}, skip_bi: {:.4})",
             i + 1,
             text.join("/"),
             path.viterbi_cost,
@@ -245,6 +245,7 @@ fn print_k_best_text(paths: &[KBestPath]) {
             path.unknown_bigram_cost,
             path.unknown_bigram_count,
             path.token_count,
+            path.skip_bigram_cost,
         );
     }
 }

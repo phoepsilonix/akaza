@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
-use log::error;
+use log::{error, info};
 
 use crate::config::{DictConfig, DictEncoding, DictType, DictUsage, EngineConfig};
 use crate::dict::loader::{load_dicts, load_dicts_with_cache};
@@ -20,6 +20,7 @@ use crate::kana_kanji::marisa_kana_kanji_dict::MarisaKanaKanjiDict;
 use crate::kana_trie::cedarwood_kana_trie::CedarwoodKanaTrie;
 use crate::lm::base::{SystemBigramLM, SystemUnigramLM};
 use crate::lm::system_bigram::MarisaSystemBigramLM;
+use crate::lm::system_skip_bigram::MarisaSystemSkipBigramLM;
 use crate::lm::system_unigram_lm::MarisaSystemUnigramLM;
 use crate::user_side_data::user_data::UserData;
 
@@ -31,6 +32,7 @@ pub struct BigramWordViterbiEngine<U: SystemUnigramLM, B: SystemBigramLM, KD: Ka
     pub graph_resolver: GraphResolver,
     pub user_data: Arc<Mutex<UserData>>,
     reranking_weights: ReRankingWeights,
+    skip_bigram_lm: Option<Rc<MarisaSystemSkipBigramLM>>,
 }
 
 impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> Debug
@@ -68,6 +70,12 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> HenkanEngine
     ) -> Result<Vec<KBestPath>> {
         let lattice = self.to_lattice(yomi, force_ranges)?;
         let mut paths = self.graph_resolver.resolve_k_best(&lattice, k)?;
+        // skip-bigram コストを計算
+        if let Some(skip_lm) = &self.skip_bigram_lm {
+            for path in paths.iter_mut() {
+                path.skip_bigram_cost = skip_lm.compute_path_cost(&path.word_ids);
+            }
+        }
         self.reranking_weights.rerank(&mut paths);
         Ok(paths)
     }
@@ -118,6 +126,20 @@ impl BigramWordViterbiEngineBuilder {
             MarisaSystemUnigramLM::load(Self::try_load(&model_name, "unigram.model")?.as_str())?;
         let system_bigram_lm =
             MarisaSystemBigramLM::load(Self::try_load(&model_name, "bigram.model")?.as_str())?;
+        let skip_bigram_path = Self::try_load(&model_name, "skip_bigram.model")?;
+        let skip_bigram_lm = match MarisaSystemSkipBigramLM::load(&skip_bigram_path) {
+            Ok(lm) => {
+                info!("Loaded skip-bigram model: {}", skip_bigram_path);
+                Some(Rc::new(lm))
+            }
+            Err(_) => {
+                info!(
+                    "Skip-bigram model not found (optional): {}",
+                    skip_bigram_path
+                );
+                None
+            }
+        };
         let system_dict = Self::try_load(&model_name, "SKK-JISYO.akaza")?;
 
         let user_data = if let Some(d) = &self.user_data {
@@ -203,6 +225,7 @@ impl BigramWordViterbiEngineBuilder {
             graph_resolver,
             user_data,
             reranking_weights,
+            skip_bigram_lm,
         })
     }
 
