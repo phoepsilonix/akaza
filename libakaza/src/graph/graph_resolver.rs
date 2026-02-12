@@ -9,6 +9,7 @@ use crate::graph::candidate::Candidate;
 use crate::graph::lattice_graph::LatticeGraph;
 use crate::graph::word_node::WordNode;
 use crate::lm::base::{SystemBigramLM, SystemSkipBigramLM, SystemUnigramLM};
+use crate::user_side_data::user_data::UserData;
 
 /// k-best の1パス分の結果。分節パターンと真のパスコスト（BOSからEOSまでの累積コスト）を保持する。
 #[derive(Debug)]
@@ -84,9 +85,19 @@ impl GraphResolver {
     }
 
     /// 祖父ノード (w_{i-2}) と現在ノード (w_i) の skip-bigram コストを返す。
-    /// ヒット時はそのコスト、ミス時はデフォルトコスト（高コスト = ペナルティ）。
+    /// ユーザー skip-bigram を優先し、見つからなければシステム LM にフォールバック。
     /// LM が未設定または word_id がない場合は 0.0。
-    fn skip_bigram_cost(&self, grandparent: &WordNode, node: &WordNode) -> f32 {
+    fn skip_bigram_cost(
+        &self,
+        grandparent: &WordNode,
+        node: &WordNode,
+        user_data: &UserData,
+    ) -> f32 {
+        // 1. ユーザー skip-bigram を優先
+        if let Some(cost) = user_data.get_skip_bigram_cost(grandparent, node) {
+            return cost;
+        }
+        // 2. システム skip-bigram LM にフォールバック
         if let Some(skip_lm) = &self.skip_bigram_lm {
             if let (Some((gp_id, _)), Some((node_id, _))) =
                 (grandparent.word_id_and_score, node.word_id_and_score)
@@ -157,7 +168,7 @@ impl GraphResolver {
                         for (rank, prev_entry) in prev_entries.iter().enumerate() {
                             // skip-bigram: 祖父ノード (prev_entry.prev_node) と現在ノード (node)
                             let skip_cost = if !is_eos {
-                                self.skip_bigram_cost(prev_entry.prev_node, node)
+                                self.skip_bigram_cost(prev_entry.prev_node, node, &user_data)
                             } else {
                                 0.0
                             };
