@@ -13,6 +13,7 @@ use crate::graph::candidate::Candidate;
 use crate::graph::word_node::WordNode;
 use crate::kana_trie::cedarwood_kana_trie::CedarwoodKanaTrie;
 use crate::user_side_data::bigram_user_stats::BiGramUserStats;
+use crate::user_side_data::skip_bigram_user_stats::SkipBigramUserStats;
 use crate::user_side_data::unigram_user_stats::UniGramUserStats;
 use crate::user_side_data::user_stats_utils::{read_user_stats_file, write_user_stats_file};
 
@@ -29,9 +30,11 @@ pub struct UserData {
 
     unigram_user_stats: UniGramUserStats,
     bigram_user_stats: BiGramUserStats,
+    skip_bigram_user_stats: SkipBigramUserStats,
 
     unigram_path: Option<String>,
     bigram_path: Option<String>,
+    skip_bigram_path: Option<String>,
     dict_path: Option<String>,
 
     pub dict: HashMap<String, Vec<String>>,
@@ -52,19 +55,34 @@ impl UserData {
             .to_str()
             .unwrap()
             .to_string();
+        let skip_bigram_path = basedir
+            .place_data_file(Path::new("skip_bigram.v1.txt"))?
+            .to_str()
+            .unwrap()
+            .to_string();
         let dict_path = basedir
             .place_data_file(Path::new("SKK-JISYO.user"))?
             .to_str()
             .unwrap()
             .to_string();
         info!(
-            "Load user data from default path: unigram={}, bigram={}",
-            unigram_path, bigram_path
+            "Load user data from default path: unigram={}, bigram={}, skip_bigram={}",
+            unigram_path, bigram_path, skip_bigram_path
         );
-        Ok(UserData::load(&unigram_path, &bigram_path, &dict_path))
+        Ok(UserData::load(
+            &unigram_path,
+            &bigram_path,
+            &skip_bigram_path,
+            &dict_path,
+        ))
     }
 
-    pub fn load(unigram_path: &String, bigram_path: &String, dict_path: &String) -> Self {
+    pub fn load(
+        unigram_path: &String,
+        bigram_path: &String,
+        skip_bigram_path: &String,
+        dict_path: &String,
+    ) -> Self {
         // ユーザーデータが読み込めないことは fatal エラーではない。
         // 初回起動時にはデータがないので。
         // データがなければ初期所状態から始める
@@ -103,6 +121,26 @@ impl UserData {
                 warn!("Cannot load user bigram data from {}: {}", bigram_path, err);
                 // ユーザーデータは初回起動時などにはないので、データがないものとして処理を続行する
                 BiGramUserStats::new(0, 0, HashMap::new())
+            }
+        };
+
+        // build skip-bigram
+        let skip_bigram_user_stats = match read_user_stats_file(skip_bigram_path) {
+            Ok(dat) => {
+                let unique_count = dat.len() as u32;
+                let total_count: u32 = dat.iter().map(|f| f.1).sum();
+                let mut words_count: HashMap<String, u32> = HashMap::new();
+                for (words, count) in dat {
+                    words_count.insert(words, count);
+                }
+                SkipBigramUserStats::new(unique_count, total_count, words_count)
+            }
+            Err(err) => {
+                warn!(
+                    "Cannot load user skip-bigram data from {}: {}",
+                    skip_bigram_path, err
+                );
+                SkipBigramUserStats::new(0, 0, HashMap::new())
             }
         };
 
@@ -145,10 +183,12 @@ impl UserData {
         UserData {
             unigram_user_stats,
             bigram_user_stats,
+            skip_bigram_user_stats,
             dict,
             kana_trie: Arc::new(Mutex::new(kana_trie)),
             unigram_path: Some(unigram_path.clone()),
             bigram_path: Some(bigram_path.clone()),
+            skip_bigram_path: Some(skip_bigram_path.clone()),
             dict_path: Some(dict_path.clone()),
             need_save: false,
         }
@@ -159,6 +199,7 @@ impl UserData {
     pub fn record_entries(&mut self, candidates: &[Candidate]) {
         self.unigram_user_stats.record_entries(candidates);
         self.bigram_user_stats.record_entries(candidates);
+        self.skip_bigram_user_stats.record_entries(candidates);
 
         // 複合語として覚えておくべきものがあれば、学習する。
         candidates
@@ -188,17 +229,22 @@ impl UserData {
     pub fn write_user_files(&mut self) -> Result<()> {
         if self.need_save {
             info!(
-                "Saving user stats file: unigram={:?},{}, bigram={:?},{}",
+                "Saving user stats file: unigram={:?},{}, bigram={:?},{}, skip_bigram={:?},{}",
                 self.unigram_path,
                 self.unigram_user_stats.word_count.len(),
                 self.bigram_path,
                 self.bigram_user_stats.word_count.len(),
+                self.skip_bigram_path,
+                self.skip_bigram_user_stats.word_count.len(),
             );
             if let Some(unigram_path) = &self.unigram_path {
                 write_user_stats_file(unigram_path, &self.unigram_user_stats.word_count)?;
             }
             if let Some(bigram_path) = &self.bigram_path {
                 write_user_stats_file(bigram_path, &self.bigram_user_stats.word_count)?;
+            }
+            if let Some(skip_bigram_path) = &self.skip_bigram_path {
+                write_user_stats_file(skip_bigram_path, &self.skip_bigram_user_stats.word_count)?;
             }
             if let Some(dict_path) = &self.dict_path {
                 write_skk_dict(dict_path, vec![self.dict.clone()])?;
@@ -216,6 +262,11 @@ impl UserData {
 
     pub fn get_bigram_cost(&self, node1: &WordNode, node2: &WordNode) -> Option<f32> {
         self.bigram_user_stats
+            .get_cost(node1.key().as_str(), node2.key().as_str())
+    }
+
+    pub fn get_skip_bigram_cost(&self, node1: &WordNode, node2: &WordNode) -> Option<f32> {
+        self.skip_bigram_user_stats
             .get_cost(node1.key().as_str(), node2.key().as_str())
     }
 }
