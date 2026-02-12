@@ -1,6 +1,7 @@
 use std::collections::btree_map::{BTreeMap, Iter};
-use std::collections::HashSet;
 use std::ops::Range;
+
+use rustc_hash::FxHashSet;
 use std::sync::{Arc, Mutex};
 
 use log::{debug, info, trace, warn};
@@ -79,12 +80,12 @@ impl Segmenter {
 
         let mut queue: Vec<usize> = Vec::new(); // 検索対象となる開始位置
         queue.push(0);
-        let mut seen: HashSet<usize> = HashSet::new();
+        let mut seen: FxHashSet<usize> = FxHashSet::default();
 
         // 終了位置ごとの候補単語リスト
         let mut words_ends_at: BTreeMap<usize, Vec<String>> = BTreeMap::new();
 
-        let mut candidates: HashSet<String> = HashSet::new();
+        let mut candidates: FxHashSet<String> = FxHashSet::default();
 
         'queue_processing: while let Some(start_pos) = queue.pop() {
             if seen.contains(&start_pos) {

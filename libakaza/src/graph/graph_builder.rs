@@ -1,6 +1,7 @@
 use std::collections::btree_map::BTreeMap;
-use std::collections::HashSet;
 use std::rc::Rc;
+
+use rustc_hash::FxHashSet;
 use std::sync::{Arc, Mutex};
 
 use kelp::{hira2kata, ConvOption};
@@ -80,7 +81,7 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
         graph.insert((yomi.len() + 1) as i32, vec![eos]);
 
         let mut key_buf = String::new();
-        let mut seen: HashSet<String> = HashSet::new();
+        let mut seen: FxHashSet<String> = FxHashSet::default();
 
         for (end_pos, segmented_yomis) in words_ends_at.iter() {
             for segmented_yomi in segmented_yomis {
