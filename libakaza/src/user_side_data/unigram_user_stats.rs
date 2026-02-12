@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use crate::cost::calc_cost;
 use crate::graph::candidate::Candidate;
@@ -12,14 +12,14 @@ pub(crate) struct UniGramUserStats {
     total_words: u32,
     // V
     /// その単語の出現頻度。「漢字/かな」がキー。
-    pub(crate) word_count: HashMap<String, u32>,
+    pub(crate) word_count: FxHashMap<String, u32>,
 }
 
 impl UniGramUserStats {
     pub(crate) fn new(
         unique_words: u32,
         total_words: u32,
-        word_count: HashMap<String, u32>,
+        word_count: FxHashMap<String, u32>,
     ) -> UniGramUserStats {
         UniGramUserStats {
             unique_words,

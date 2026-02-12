@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::collections::BinaryHeap;
 use std::rc::Rc;
+
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use anyhow::{bail, Context};
 use log::{error, info, trace};
@@ -136,8 +138,8 @@ impl GraphResolver {
     ) -> anyhow::Result<Vec<KBestPath>> {
         let yomi = &lattice.yomi;
         // 各ノードに対して上位 k 個のエントリを保持する
-        let mut kbest_map: HashMap<&WordNode, Vec<KBestEntry>> =
-            HashMap::with_capacity(yomi.len() * 2);
+        let mut kbest_map: FxHashMap<&WordNode, Vec<KBestEntry>> =
+            FxHashMap::with_capacity_and_hasher(yomi.len() * 2, Default::default());
 
         // user_data のロックを一度だけ取得し、ループ中は保持する
         let user_data = lattice.lock_user_data();
@@ -237,7 +239,8 @@ impl GraphResolver {
         }
 
         // costmap を構築（get_candidates で使用。1-best のコストを使う）
-        let mut costmap: HashMap<&WordNode, f32> = HashMap::with_capacity(kbest_map.len());
+        let mut costmap: FxHashMap<&WordNode, f32> =
+            FxHashMap::with_capacity_and_hasher(kbest_map.len(), Default::default());
         for (node, entries) in &kbest_map {
             if let Some(best) = entries.first() {
                 costmap.insert(node, best.cost);
@@ -266,7 +269,8 @@ impl GraphResolver {
             .with_context(|| format!("k-best entries not found for EOS at position {}", eos_pos))?;
 
         let mut all_paths: Vec<KBestPath> = Vec::with_capacity(k);
-        let mut seen_patterns: HashSet<Vec<(i32, usize)>> = HashSet::with_capacity(k);
+        let mut seen_patterns: FxHashSet<Vec<(i32, usize)>> =
+            FxHashSet::with_capacity_and_hasher(k, Default::default());
 
         for eos_entry in eos_entries {
             let mut path: Vec<Vec<Candidate>> = Vec::new();
@@ -354,7 +358,7 @@ impl GraphResolver {
         &self,
         node: &WordNode,
         lattice: &LatticeGraph<U, B>,
-        costmap: &HashMap<&WordNode, f32>,
+        costmap: &FxHashMap<&WordNode, f32>,
         end_pos: i32,
     ) -> Vec<Candidate> {
         // end_pos で終わる単語を得る。
@@ -429,7 +433,7 @@ impl GraphResolver {
         lattice: &LatticeGraph<U, B>,
         end_pos: i32,
         depth: i32,
-        cost_map: &&HashMap<&WordNode, f32>,
+        cost_map: &&FxHashMap<&WordNode, f32>,
         tail_cost: f32,
         next_node: Option<&WordNode>,
     ) {
@@ -558,6 +562,7 @@ impl Ord for BreakDown {
 #[cfg(test)]
 mod tests {
     use std::collections::btree_map::BTreeMap;
+    use std::collections::HashMap;
     use std::fs::File;
     use std::io::Write;
     use std::rc::Rc;

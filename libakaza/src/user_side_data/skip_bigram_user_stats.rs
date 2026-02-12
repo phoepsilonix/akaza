@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 
 use crate::cost::calc_cost;
 use crate::graph::candidate::Candidate;
@@ -10,14 +10,14 @@ pub(crate) struct SkipBigramUserStats {
     /// 総単語出現数
     total_words: u32,
     /// skip-bigram の出現頻度。"surface1/kana1\tsurface2/kana2" がキー。
-    pub(crate) word_count: HashMap<String, u32>,
+    pub(crate) word_count: FxHashMap<String, u32>,
 }
 
 impl SkipBigramUserStats {
     pub(crate) fn new(
         unique_words: u32,
         total_words: u32,
-        word_count: HashMap<String, u32>,
+        word_count: FxHashMap<String, u32>,
     ) -> SkipBigramUserStats {
         SkipBigramUserStats {
             unique_words,

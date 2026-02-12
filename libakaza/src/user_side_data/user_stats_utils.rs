@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::{BufRead, BufReader, Write};
@@ -27,7 +27,7 @@ pub(crate) fn read_user_stats_file(path: &String) -> Result<Vec<(String, u32)>> 
     Ok(result)
 }
 
-pub(crate) fn write_user_stats_file(path: &str, word_count: &HashMap<String, u32>) -> Result<()> {
+pub(crate) fn write_user_stats_file(path: &str, word_count: &FxHashMap<String, u32>) -> Result<()> {
     let mut tmpfile = OpenOptions::new()
         .write(true)
         .create(true)
@@ -56,7 +56,8 @@ mod tests {
     fn test_write() {
         let tmpfile = NamedTempFile::new().unwrap();
         let path = tmpfile.path().to_str().unwrap().to_string();
-        write_user_stats_file(&path, &HashMap::from([("渡し".to_string(), 3_u32)])).unwrap();
+        let wc: FxHashMap<String, u32> = [("渡し".to_string(), 3_u32)].into_iter().collect();
+        write_user_stats_file(&path, &wc).unwrap();
         let mut buf = String::new();
         File::open(path).unwrap().read_to_string(&mut buf).unwrap();
         assert_eq!(buf, "渡し 3\n");
