@@ -1,5 +1,20 @@
 # Changelog
 
+## [v0.5.0](https://github.com/akaza-im/akaza/compare/v0.4.0...v0.5.0) - 2026-02-12
+- docs: k-best リランキング機構の設計方針 by @tokuhirom in https://github.com/akaza-im/akaza/pull/430
+- feat: k-best リランキング機構を実装 by @tokuhirom in https://github.com/akaza-im/akaza/pull/432
+- fix: evaluate/check でリランキングが反映されるように修正 by @tokuhirom in https://github.com/akaza-im/akaza/pull/433
+- docs: リランキング評価レポートを追加 by @tokuhirom in https://github.com/akaza-im/akaza/pull/434
+- feat: length-weight のデフォルト値を 2.0 に設定 by @tokuhirom in https://github.com/akaza-im/akaza/pull/435
+- feat: skip-bigram リランキングの実装 by @tokuhirom in https://github.com/akaza-im/akaza/pull/436
+- feat: skip-bigram を Viterbi DP に統合し変換精度を向上 by @tokuhirom in https://github.com/akaza-im/akaza/pull/437
+- feat: learn-corpus で skip-bigram の学習に対応 by @tokuhirom in https://github.com/akaza-im/akaza/pull/439
+- feat: lefthook による pre-commit フック設定を追加 by @tokuhirom in https://github.com/akaza-im/akaza/pull/438
+- fix: check/evaluate の skip-bigram-weight デフォルトを 0.2 に修正 by @tokuhirom in https://github.com/akaza-im/akaza/pull/440
+- feat: ユーザー適応学習に skip-bigram を追加 by @tokuhirom in https://github.com/akaza-im/akaza/pull/441
+- perf: with_capacity 追加とバッファ再利用でメモリアロケーション削減 by @tokuhirom in https://github.com/akaza-im/akaza/pull/442
+- perf: libakaza の HashMap/HashSet を FxHashMap/FxHashSet に置き換え by @tokuhirom in https://github.com/akaza-im/akaza/pull/443
+
 ## [v0.4.0](https://github.com/akaza-im/akaza/compare/v0.3.0...v0.4.0) - 2026-02-11
 - feat: 数字トークンの <NUM> 正規化による LM スコア集約 by @tokuhirom in https://github.com/akaza-im/akaza/pull/426
 - fix: 裸の数字トークンを <NUM> 正規化から除外 by @tokuhirom in https://github.com/akaza-im/akaza/pull/428
