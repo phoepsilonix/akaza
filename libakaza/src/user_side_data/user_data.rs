@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
@@ -6,6 +5,7 @@ use std::time::SystemTime;
 use anyhow::Result;
 use encoding_rs::UTF_8;
 use log::{info, warn};
+use rustc_hash::FxHashMap;
 
 use crate::dict::skk::read::read_skkdict;
 use crate::dict::skk::write::write_skk_dict;
@@ -37,7 +37,7 @@ pub struct UserData {
     skip_bigram_path: Option<String>,
     dict_path: Option<String>,
 
-    pub dict: HashMap<String, Vec<String>>,
+    pub dict: FxHashMap<String, Vec<String>>,
 
     pub(crate) need_save: bool,
 }
@@ -90,7 +90,7 @@ impl UserData {
             Ok(dat) => {
                 let unique_count = dat.len() as u32;
                 let total_count: u32 = dat.iter().map(|f| f.1).sum();
-                let mut word_count: HashMap<String, u32> = HashMap::new();
+                let mut word_count: FxHashMap<String, u32> = FxHashMap::default();
                 for (word, count) in dat {
                     word_count.insert(word, count);
                 }
@@ -102,7 +102,7 @@ impl UserData {
                     unigram_path, err
                 );
 
-                UniGramUserStats::new(0, 0, HashMap::new())
+                UniGramUserStats::new(0, 0, FxHashMap::default())
             }
         };
 
@@ -111,7 +111,7 @@ impl UserData {
             Ok(dat) => {
                 let unique_count = dat.len() as u32;
                 let total_count: u32 = dat.iter().map(|f| f.1).sum();
-                let mut words_count: HashMap<String, u32> = HashMap::new();
+                let mut words_count: FxHashMap<String, u32> = FxHashMap::default();
                 for (words, count) in dat {
                     words_count.insert(words, count);
                 }
@@ -120,7 +120,7 @@ impl UserData {
             Err(err) => {
                 warn!("Cannot load user bigram data from {}: {}", bigram_path, err);
                 // ユーザーデータは初回起動時などにはないので、データがないものとして処理を続行する
-                BiGramUserStats::new(0, 0, HashMap::new())
+                BiGramUserStats::new(0, 0, FxHashMap::default())
             }
         };
 
@@ -129,7 +129,7 @@ impl UserData {
             Ok(dat) => {
                 let unique_count = dat.len() as u32;
                 let total_count: u32 = dat.iter().map(|f| f.1).sum();
-                let mut words_count: HashMap<String, u32> = HashMap::new();
+                let mut words_count: FxHashMap<String, u32> = FxHashMap::default();
                 for (words, count) in dat {
                     words_count.insert(words, count);
                 }
@@ -140,12 +140,12 @@ impl UserData {
                     "Cannot load user skip-bigram data from {}: {}",
                     skip_bigram_path, err
                 );
-                SkipBigramUserStats::new(0, 0, HashMap::new())
+                SkipBigramUserStats::new(0, 0, FxHashMap::default())
             }
         };
 
-        let dict = match read_skkdict(Path::new(dict_path), UTF_8) {
-            Ok(d) => d,
+        let dict: FxHashMap<String, Vec<String>> = match read_skkdict(Path::new(dict_path), UTF_8) {
+            Ok(d) => d.into_iter().collect(),
             Err(err) => {
                 warn!("Cannot load user dict: {:?} {:?}", dict_path, err);
                 Default::default()
@@ -247,7 +247,7 @@ impl UserData {
                 write_user_stats_file(skip_bigram_path, &self.skip_bigram_user_stats.word_count)?;
             }
             if let Some(dict_path) = &self.dict_path {
-                write_skk_dict(dict_path, vec![self.dict.clone()])?;
+                write_skk_dict(dict_path, vec![self.dict.clone().into_iter().collect()])?;
             }
 
             self.need_save = false;
