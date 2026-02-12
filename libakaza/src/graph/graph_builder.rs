@@ -80,12 +80,13 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
         graph.insert((yomi.len() + 1) as i32, vec![eos]);
 
         let mut key_buf = String::new();
+        let mut seen: HashSet<String> = HashSet::new();
 
         for (end_pos, segmented_yomis) in words_ends_at.iter() {
             for segmented_yomi in segmented_yomis {
                 let vec = graph.entry(*end_pos as i32).or_default();
 
-                let mut seen: HashSet<String> = HashSet::new();
+                seen.clear();
 
                 // TODO このへんコピペすぎるので整理必要。
                 // システム辞書にある候補を元に候補をリストアップする
