@@ -84,6 +84,8 @@ impl Segmenter {
         // 終了位置ごとの候補単語リスト
         let mut words_ends_at: BTreeMap<usize, Vec<String>> = BTreeMap::new();
 
+        let mut candidates: HashSet<String> = HashSet::new();
+
         'queue_processing: while let Some(start_pos) = queue.pop() {
             if seen.contains(&start_pos) {
                 continue;
@@ -120,7 +122,7 @@ impl Segmenter {
                 continue;
             }
 
-            let mut candidates: HashSet<String> = HashSet::new();
+            candidates.clear();
             if let Some(captured) = self.number_pattern.captures(yomi) {
                 // 数字は一つの単語として処理する。
                 let s = captured.get(0).unwrap().as_str();

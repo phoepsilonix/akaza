@@ -125,7 +125,8 @@ impl GraphResolver {
     ) -> anyhow::Result<Vec<KBestPath>> {
         let yomi = &lattice.yomi;
         // 各ノードに対して上位 k 個のエントリを保持する
-        let mut kbest_map: HashMap<&WordNode, Vec<KBestEntry>> = HashMap::new();
+        let mut kbest_map: HashMap<&WordNode, Vec<KBestEntry>> =
+            HashMap::with_capacity(yomi.len() * 2);
 
         // user_data のロックを一度だけ取得し、ループ中は保持する
         let user_data = lattice.lock_user_data();
@@ -148,7 +149,7 @@ impl GraphResolver {
 
                 // 各前ノードの k-best エントリそれぞれについて候補を生成
                 let is_eos = node.surface == "__EOS__";
-                let mut entries: Vec<KBestEntry> = Vec::new();
+                let mut entries: Vec<KBestEntry> = Vec::with_capacity(k * prev_nodes.len());
                 for prev in prev_nodes {
                     let (edge_cost, is_known_bigram) =
                         lattice.get_edge_cost_detail_with_user_data(prev, node, &user_data);
@@ -225,7 +226,7 @@ impl GraphResolver {
         }
 
         // costmap を構築（get_candidates で使用。1-best のコストを使う）
-        let mut costmap: HashMap<&WordNode, f32> = HashMap::new();
+        let mut costmap: HashMap<&WordNode, f32> = HashMap::with_capacity(kbest_map.len());
         for (node, entries) in &kbest_map {
             if let Some(best) = entries.first() {
                 costmap.insert(node, best.cost);
@@ -253,8 +254,8 @@ impl GraphResolver {
             .get(eos)
             .with_context(|| format!("k-best entries not found for EOS at position {}", eos_pos))?;
 
-        let mut all_paths: Vec<KBestPath> = Vec::new();
-        let mut seen_patterns: HashSet<Vec<(i32, usize)>> = HashSet::new();
+        let mut all_paths: Vec<KBestPath> = Vec::with_capacity(k);
+        let mut seen_patterns: HashSet<Vec<(i32, usize)>> = HashSet::with_capacity(k);
 
         for eos_entry in eos_entries {
             let mut path: Vec<Vec<Candidate>> = Vec::new();
