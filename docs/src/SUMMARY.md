@@ -19,6 +19,7 @@
     - [リランキング](internals/notes/reranking.md)
     - [リランキング評価レポート](internals/notes/reranking-evaluation-report.md)
     - [構造化パーセプトロン](internals/notes/structured-perceptron.md)
+    - [learn-corpus 改善実験](internals/notes/learn-corpus-improvement.md)
     - [前処理]()
       - [漢方薬の読み問題](internals/notes/preproc/kanpoyaku.md)
       - [MeCab 形態素解析](internals/notes/preproc/mecab.md)
