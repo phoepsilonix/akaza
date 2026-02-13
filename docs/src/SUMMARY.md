@@ -12,6 +12,7 @@
   - [データフロー](internals/data-flow.md)
   - [変換エンジンの仕組み](internals/conversion-engine.md)
   - [コーパス学習](internals/learn-corpus.md)
+  - [評価方法](internals/evaluation.md)
   - [文節伸縮の仕様](internals/clause-extension-behavior.md)
   - [ユーザーデータ](internals/user-data.md)
   - [設計メモ・レポート](internals/notes/README.md)
