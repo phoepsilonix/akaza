@@ -14,3 +14,6 @@ target/
 /.idea/
 perf.data
 perf.data.old
+docs/book/
+docs/mermaid.min.js
+docs/mermaid-init.js

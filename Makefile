@@ -65,5 +65,12 @@ docker-test-e2e:
 docker-test-shell:
 	docker compose -f docker-compose.test.yml run --rm test bash
 
+docs-build:
+	cd docs && mdbook build
+
+docs-serve:
+	cd docs && mdbook serve --open
+
 .PHONY: all build dev dev-run dev-setup install install-model install-resources clean \
-	docker-test-build docker-test docker-test-unit docker-test-integration docker-test-e2e docker-test-shell
+	docker-test-build docker-test docker-test-unit docker-test-integration docker-test-e2e docker-test-shell \
+	docs-build docs-serve
