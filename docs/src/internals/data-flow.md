@@ -22,6 +22,14 @@ Akaza の言語モデルとシステム辞書は、2つのリポジトリに分�
 
 CC-100 は `-full` バリアントで使用され、重み付き（デフォルト 0.3）で統計に組み込まれる。
 
+#### CC-100 の重み 0.3 の根拠
+
+Wikipedia は百科事典的な語彙に偏り、日常語（買う・結構・寝る・使う等）の頻度が低い。CC-100 はこれを補うために導入されたが、CC-100 は jawiki の約 1.9 倍のボリュームがあり、そのまま統合すると機能語の崩壊（`と→途`、`さい→賽` 等）が発生し再現率が 1.28% 低下する。
+
+weight=0.3 を適用すると実効的な寄与は `1.9 × 0.3 ≒ 0.57 倍`となり、jawiki の統計を基盤としつつ CC-100 で日常語を補強する構成が実現できる。この設定で Good +316、再現率 +0.59% の改善が確認された。
+
+詳細な評価は [akaza-default-model/docs/cc100-weighted-integration.md](https://github.com/akaza-im/akaza-default-model/blob/main/docs/cc100-weighted-integration.md) を参照。
+
 ### パイプライン
 
 ```mermaid
