@@ -1,49 +1,127 @@
-# akaza の data flow
+# データフロー
 
-## language model の作成フロー
+Akaza の言語モデルとシステム辞書は、2つのリポジトリに分かれたパイプラインで構築される。
 
-ここで、language model とは日本語における単語の発現確率のことを指す。
+| リポジトリ | 役割 |
+|---|---|
+| [akaza-corpus-stats](https://github.com/akaza-im/akaza-corpus-stats) | コーパスの収集・トーカナイズ・統計データ生成 |
+| [akaza-default-model](https://github.com/akaza-im/akaza-default-model) | 統計データからモデルと辞書を構築 |
 
-akaza では、基本的に wikipedia 日本語版および青空文庫のデータをもとに単語の発現確率及び 2gram での発現確率を求めている。
+## 1. コーパス統計の生成 (akaza-corpus-stats)
 
-わかちがき処理及びよみがな処理には vibrato+ipadic を利用している。
+オープンなコーパスからトーカナイズ済みの n-gram 統計データを生成する。
+わかちがき処理及びよみがな処理には [Vibrato](https://github.com/daac-tools/vibrato) (ipadic) を利用している。
 
-```mermaid
-graph TD
-    wikipedia --> wikipedia.xml.bz2
-    -- bunzip2 --> wikipedia.xml
-    -- wikiextractor --> extracted/
-    -- vibrato --> tokenized/
-    aozora_bunko --> vibrato --> tokenized/
-    tokenized/ --> wfreq
-    wfreq --> vocab
-    tokenized/ --> bigram.raw
-    wfreq --> unigram.raw
-    corpus/ --> learn-corpus
-    bigram.raw --> learn-corpus
-    unigram.raw --> learn-corpus
-    learn-corpus --> unigram.model
-    learn-corpus --> bigram.model
-```
+### データソース
 
-## システム辞書
+| ソース | 内容 |
+|---|---|
+| 日本語 Wikipedia | CirrusSearch ダンプ (NDJSON) |
+| 青空文庫 | git submodule で取り込み |
+| CC-100 Japanese | Common Crawl ベースの大規模テキスト (品質フィルタ適用) |
 
-ひらがなと漢字の変換表として、システム辞書を用意している。
-主に SKK の辞書と、wikipedia から生成された SKK 用の辞書である jawiki-kana-kanji-dict をベースにしている。
+CC-100 は `-full` バリアントで使用され、重み付き（デフォルト 0.3）で統計に組み込まれる。
 
-ここで生成される辞書形式は、BinaryDict と呼ばれている。
+### パイプライン
 
 ```mermaid
 graph TD
-    corpus/*.txt --> system-dict
-    work/vibrato-ipadic.vocab --> system-dict
-    dict/SKK-JISYO.akaza --> system-dict
-    system-dict -- make-system-dict--> data/SKK-JISYO.akaza
+    subgraph データソース
+        jawiki[日本語 Wikipedia]
+        aozora[青空文庫]
+        cc100[CC-100 Japanese]
+    end
+
+    subgraph テキスト抽出
+        jawiki --> extract_cirrus[extract-cirrus.py]
+        cc100 --> extract_cc100[extract-cc100.py]
+    end
+
+    subgraph "Vibrato でトーカナイズ"
+        extract_cirrus --> tokenize_jawiki[jawiki/vibrato-ipadic/]
+        aozora --> tokenize_aozora[aozora_bunko/vibrato-ipadic/]
+        extract_cc100 --> tokenize_cc100[cc100/vibrato-ipadic/]
+    end
+
+    subgraph 統計データ生成
+        tokenize_jawiki --> wfreq[wfreq 単語頻度集計]
+        tokenize_aozora --> wfreq
+        tokenize_cc100 -.->|weight=0.3| wfreq
+
+        wfreq --> vocab[vocab 語彙抽出 threshold=16]
+        wfreq --> unigram_trie[unigram.wordcnt.trie]
+
+        unigram_trie --> bigram_trie[bigram.wordcnt.trie threshold=3]
+        tokenize_jawiki --> bigram_trie
+        tokenize_aozora --> bigram_trie
+        tokenize_cc100 -.-> bigram_trie
+
+        unigram_trie --> skip_bigram_trie[skip-bigram.wordcnt.trie threshold=3]
+        tokenize_jawiki --> skip_bigram_trie
+        tokenize_aozora --> skip_bigram_trie
+        tokenize_cc100 -.-> skip_bigram_trie
+    end
+
+    subgraph "成果物 (GitHub Releases)"
+        unigram_trie --> release[akaza-corpus-stats.tar.gz]
+        bigram_trie --> release
+        skip_bigram_trie --> release
+        vocab --> release
+    end
 ```
 
-## ユーザー言語モデル
+※ 破線は `-full` バリアントのみで使用される CC-100 のフローを示す。
 
-akaza はユーザーごとに学習が可能なように設計されている。
+## 2. モデル構築 (akaza-default-model)
+
+akaza-corpus-stats の成果物をダウンロードし、コーパス補正を加えてモデルと辞書を構築する。
+
+### コーパス補正
+
+Wikipedia・青空文庫のデータには偏りがあるため、手作業で作成したコーパスでスコアを補正する。
+
+| ファイル | エポック数 | 用途 |
+|----------|-----------|------|
+| `must.txt` | 10,000 | 必ず変換できなくてはならない表現 |
+| `should.txt` | 100 | 変換できてほしい表現 |
+| `may.txt` | 10 | できれば変換できてほしい表現 |
+
+### パイプライン
+
+```mermaid
+graph TD
+    subgraph 入力
+        corpus_stats[akaza-corpus-stats<br/>GitHub Releases]
+        training[training-corpus/<br/>must/should/may.txt]
+        unidic[UniDic]
+        skk_base[dict/SKK-JISYO.akaza]
+    end
+
+    corpus_stats --> |unigram/bigram/skip-bigram<br/>wordcnt trie| learn_corpus[akaza-data learn-corpus]
+    training --> learn_corpus
+
+    learn_corpus --> unigram_model[unigram.model]
+    learn_corpus --> bigram_model[bigram.model]
+    learn_corpus --> skip_bigram_model[skip_bigram.model]
+
+    corpus_stats --> |vocab| make_dict[akaza-data make-dict]
+    training --> make_dict
+    unidic --> make_dict
+    skk_base --> make_dict
+    make_dict --> system_dict[SKK-JISYO.akaza<br/>システム辞書]
+```
+
+### 成果物
+
+| ファイル | 内容 |
+|---|---|
+| `unigram.model` | 単語出現コスト (MARISA Trie) |
+| `bigram.model` | 単語間遷移コスト (MARISA Trie) |
+| `skip_bigram.model` | 1語スキップ遷移コスト (MARISA Trie) |
+| `SKK-JISYO.akaza` | システム辞書 (SKK-JISYO.L に含まれない語彙) |
+
+## 3. ユーザー言語モデル
+
+Akaza はユーザーごとに学習が可能なように設計されている。
 シンプルに実装するために、ユーザー言語モデルはプレインテキスト形式で保存される。
 プレインテキスト形式なので、ユーザーは自分の好きなようにファイルを変更することが可能である。
-
