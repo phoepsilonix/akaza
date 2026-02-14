@@ -17,3 +17,15 @@ perf.data.old
 docs/book/
 docs/mermaid.min.js
 docs/mermaid-init.js
+
+# default-model build artifacts
+default-model/work/
+default-model/data/
+default-model/tmp/
+default-model/data-baseline/
+
+# corpus-stats build artifacts
+corpus-stats/work/
+corpus-stats/dist/
+corpus-stats/dist-full/
+corpus-stats/*.tar.gz
