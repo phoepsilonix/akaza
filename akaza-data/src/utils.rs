@@ -39,7 +39,9 @@ pub fn get_file_list(src_dir: &Path) -> anyhow::Result<Vec<PathBuf>> {
 /// `<NUM>/<NUM>` のスコアが極端に高くなり、助詞「に」「さん」「ご」等が
 /// 数字に化ける退行を引き起こすため。
 ///
-/// - `"1匹/1ひき"` → `"<NUM>匹/<NUM>匹"`
+/// surface 側は漢字接尾辞をそのまま保持し、reading 側はかな読みを保持する。
+/// - `"1匹/1ひき"` → `"<NUM>匹/<NUM>ひき"`
+/// - `"90行/90ぎょう"` → `"<NUM>行/<NUM>ぎょう"`
 /// - `"1/1"` → `"1/1"` (変換なし — 裸の数字)
 /// - `"匹/ひき"` → `"匹/ひき"` (変換なし)
 pub fn normalize_num_token(word: &str) -> Cow<'_, str> {
@@ -47,16 +49,20 @@ pub fn normalize_num_token(word: &str) -> Cow<'_, str> {
         return Cow::Borrowed(word);
     };
     let surface = &word[..slash_pos];
+    let reading = &word[slash_pos + 1..];
     let digit_end = surface.bytes().take_while(|b| b.is_ascii_digit()).count();
     if digit_end == 0 {
         return Cow::Borrowed(word);
     }
-    let suffix = &surface[digit_end..];
-    if suffix.is_empty() {
+    let surface_suffix = &surface[digit_end..];
+    if surface_suffix.is_empty() {
         // 裸の数字は正規化しない
         Cow::Borrowed(word)
     } else {
-        Cow::Owned(format!("<NUM>{0}/<NUM>{0}", suffix))
+        // reading 側も先頭の数字部分を <NUM> に置換し、かな読みを保持
+        let reading_digit_end = reading.bytes().take_while(|b| b.is_ascii_digit()).count();
+        let reading_suffix = &reading[reading_digit_end..];
+        Cow::Owned(format!("<NUM>{surface_suffix}/<NUM>{reading_suffix}"))
     }
 }
 
@@ -98,12 +104,12 @@ mod tests {
 
     #[test]
     fn test_normalize_num_token_with_suffix() {
-        assert_eq!(normalize_num_token("1匹/1ひき"), "<NUM>匹/<NUM>匹");
+        assert_eq!(normalize_num_token("1匹/1ひき"), "<NUM>匹/<NUM>ひき");
     }
 
     #[test]
     fn test_normalize_num_token_with_suffix_yen() {
-        assert_eq!(normalize_num_token("100円/100えん"), "<NUM>円/<NUM>円");
+        assert_eq!(normalize_num_token("100円/100えん"), "<NUM>円/<NUM>えん");
     }
 
     #[test]
@@ -125,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_normalize_num_token_year() {
-        assert_eq!(normalize_num_token("2019年/2019ねん"), "<NUM>年/<NUM>年");
+        assert_eq!(normalize_num_token("2019年/2019ねん"), "<NUM>年/<NUM>ねん");
     }
 
     #[test]

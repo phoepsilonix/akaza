@@ -128,6 +128,19 @@ impl Segmenter {
                 // 数字は一つの単語として処理する。
                 let s = captured.get(0).unwrap().as_str();
                 candidates.insert(s.to_string());
+
+                // 数字の後にかなが続く場合、複合セグメント（例: "90ぎょう"）も追加する。
+                // Viterbi が LM スコアに基づいて個別/複合を選択する。
+                let after_num = &yomi[s.len()..];
+                if !after_num.is_empty() {
+                    for trie in &self.tries {
+                        let got = trie.lock().unwrap().common_prefix_search(after_num);
+                        for kana_word in got {
+                            let compound = format!("{}{}", s, kana_word);
+                            candidates.insert(compound);
+                        }
+                    }
+                }
             } else {
                 for trie in &self.tries {
                     let got = trie.lock().unwrap().common_prefix_search(yomi);
@@ -238,6 +251,19 @@ mod tests {
             graph,
             SegmentationResult::new(BTreeMap::from([(3, vec!["365".to_string()]),]))
         )
+    }
+
+    #[test]
+    fn test_number_with_kana_suffix() {
+        let kana_trie = CedarwoodKanaTrie::build(vec!["ぎょう".to_string(), "ぎょ".to_string()]);
+
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph = segmenter.build("90ぎょう", None);
+        // "90" (数字のみ), "90ぎょ" (複合), "90ぎょう" (複合) が候補に入る
+        let ends_at_11 = graph.base.get(&11).unwrap();
+        assert!(ends_at_11.contains(&"90ぎょう".to_string()));
+        // 数字単体も存在する
+        assert!(graph.base.get(&2).unwrap().contains(&"90".to_string()));
     }
 
     #[test]
