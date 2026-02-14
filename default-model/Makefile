@@ -46,6 +46,7 @@ work/unidic/lex_3_1.csv: work/unidic/unidic.zip
 # 統計的仮名かな漢字変換のためのモデル作成処理
 
 data/bigram.model: work/corpus-stats/_SUCCESS training-corpus/must.txt training-corpus/should.txt training-corpus/may.txt data/SKK-JISYO.akaza
+	mkdir -p data
 	akaza-data learn-corpus \
 		--delta=2000 \
 		--may-epochs=10 \
@@ -70,6 +71,7 @@ data/skip_bigram.model: data/bigram.model
 # から、SKK-JISYO.L に含まれる語彙を除いたものが登録されている。
 
 data/SKK-JISYO.akaza: work/corpus-stats/_SUCCESS dict/SKK-JISYO.akaza training-corpus/must.txt training-corpus/should.txt training-corpus/may.txt work/unidic/lex_3_1.csv
+	mkdir -p data
 	akaza-data make-dict \
 		--corpus training-corpus/must.txt \
 		--corpus training-corpus/should.txt \
