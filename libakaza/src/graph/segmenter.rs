@@ -43,6 +43,30 @@ pub struct Segmenter {
     number_pattern: Regex,
 }
 
+const COUNTER_YOMI_PREFIXES: [&str; 4] = ["ひき", "びき", "ぴき", "しゅうかん"];
+
+fn fullwidth_digit_prefix_len(s: &str) -> usize {
+    let mut end = 0;
+    for (idx, ch) in s.char_indices() {
+        if ('０'..='９').contains(&ch) {
+            end = idx + ch.len_utf8();
+        } else {
+            break;
+        }
+    }
+    end
+}
+
+fn kana_numeral_prefix_len(s: &str) -> usize {
+    // 段階導入: まずは要件で必要な最小セットだけ扱う。
+    for pat in ["ひゃく", "ひゃっ", "ぜろ", "れい"] {
+        if s.starts_with(pat) {
+            return pat.len();
+        }
+    }
+    0
+}
+
 impl Segmenter {
     pub fn new(tries: Vec<Arc<Mutex<dyn KanaTrie>>>) -> Segmenter {
         info!("Registering tries for Segmenter: {}", tries.len());
@@ -124,9 +148,19 @@ impl Segmenter {
             }
 
             candidates.clear();
-            if let Some(captured) = self.number_pattern.captures(yomi) {
+            let numeric_len = if let Some(captured) = self.number_pattern.captures(yomi) {
+                captured.get(0).map(|m| m.as_str().len()).unwrap_or(0)
+            } else {
+                let fw_len = fullwidth_digit_prefix_len(yomi);
+                if fw_len > 0 {
+                    fw_len
+                } else {
+                    kana_numeral_prefix_len(yomi)
+                }
+            };
+            if numeric_len > 0 {
                 // 数字は一つの単語として処理する。
-                let s = captured.get(0).unwrap().as_str();
+                let s = &yomi[..numeric_len];
                 candidates.insert(s.to_string());
 
                 // 数字の後にかなが続く場合、複合セグメント（例: "90ぎょう"）も追加する。
@@ -138,6 +172,12 @@ impl Segmenter {
                         for kana_word in got {
                             let compound = format!("{}{}", s, kana_word);
                             candidates.insert(compound);
+                        }
+                    }
+                    // 助数詞はコーパス外でも扱いたいので、最小セットを規則で補完する。
+                    for counter_yomi in COUNTER_YOMI_PREFIXES {
+                        if after_num.starts_with(counter_yomi) {
+                            candidates.insert(format!("{s}{counter_yomi}"));
                         }
                     }
                 }
@@ -264,6 +304,32 @@ mod tests {
         assert!(ends_at_11.contains(&"90ぎょう".to_string()));
         // 数字単体も存在する
         assert!(graph.base.get(&2).unwrap().contains(&"90".to_string()));
+    }
+
+    #[test]
+    fn test_fullwidth_number_with_kana_suffix() {
+        let kana_trie = CedarwoodKanaTrie::build(vec!["しゅうかん".to_string()]);
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph = segmenter.build("５１６しゅうかん", None);
+        assert!(graph.base.get(&9).unwrap().contains(&"５１６".to_string()));
+        assert!(graph
+            .base
+            .get(&24)
+            .unwrap()
+            .contains(&"５１６しゅうかん".to_string()));
+    }
+
+    #[test]
+    fn test_kana_numeral_with_counter_suffix() {
+        let kana_trie = CedarwoodKanaTrie::build(vec![]);
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph = segmenter.build("ぜろひき", None);
+        assert!(graph.base.get(&6).unwrap().contains(&"ぜろ".to_string()));
+        assert!(graph
+            .base
+            .get(&12)
+            .unwrap()
+            .contains(&"ぜろひき".to_string()));
     }
 
     #[test]
