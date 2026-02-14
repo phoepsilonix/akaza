@@ -164,8 +164,8 @@ fn check_one_line<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict>(
             print_k_best_text(&paths);
         }
     } else {
-        let lattice = engine.to_lattice(yomi, None)?;
-        let mut result = engine.resolve(&lattice)?;
+        // 通常モード: リランキング適用済みの変換結果を取得
+        let mut result = engine.convert(yomi, None)?;
 
         // 候補数を制限する
         for segment in &mut result {
