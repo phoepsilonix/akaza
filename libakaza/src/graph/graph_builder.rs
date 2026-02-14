@@ -10,12 +10,12 @@ use crate::graph::word_node::{WordNode, BOS_TOKEN_KEY, EOS_TOKEN_KEY};
 use crate::kana_kanji::base::KanaKanjiDict;
 use crate::kansuji::int2kanji;
 use crate::lm::base::{SystemBigramLM, SystemUnigramLM};
+use crate::numeric_counter::{
+    counter_surfaces_for, normalize_counter_key_for_lm, normalize_counter_yomi,
+};
 use crate::user_side_data::user_data::UserData;
 use kelp::{hira2kata, ConvOption};
 use log::trace;
-
-const COUNTER_SURFACES_HIKI: [&str; 1] = ["匹"];
-const COUNTER_SURFACES_SHUKAN: [&str; 1] = ["週間"];
 
 #[derive(Debug, Clone)]
 struct NumericPrefix {
@@ -86,14 +86,6 @@ fn parse_numeric_prefix(s: &str) -> Option<NumericPrefix> {
     None
 }
 
-fn normalize_counter_yomi(yomi: &str) -> Option<(&'static str, &'static [&'static str])> {
-    match yomi {
-        "ひき" | "びき" | "ぴき" => Some(("ひき", &COUNTER_SURFACES_HIKI)),
-        "しゅうかん" => Some(("しゅうかん", &COUNTER_SURFACES_SHUKAN)),
-        _ => None,
-    }
-}
-
 fn leading_numeric_len(s: &str) -> usize {
     parse_numeric_prefix(s).map(|n| n.consumed_len).unwrap_or(0)
 }
@@ -107,6 +99,10 @@ fn leading_numeric_len(s: &str) -> usize {
 /// surface 側は漢字接尾辞を保持し、reading 側はかな読みを保持する。
 /// - `"90行/90ぎょう"` → `"<NUM>行/<NUM>ぎょう"`
 fn normalize_surface_for_lm(key: &str) -> Option<String> {
+    if let Some(normalized_counter) = normalize_counter_key_for_lm(key) {
+        return Some(normalized_counter);
+    }
+
     let slash_pos = key.find('/')?;
     let surface = &key[..slash_pos];
     let reading = &key[slash_pos + 1..];
@@ -283,12 +279,12 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
                         if let Some(from_dict) = self.system_kana_kanji_dict.get(kana_part) {
                             kanjis.extend(from_dict.iter().cloned());
                         }
-                        if let Some((canonical_yomi, counter_surfaces)) =
-                            normalize_counter_yomi(kana_part)
-                        {
+                        if let Some(canonical_yomi) = normalize_counter_yomi(kana_part) {
                             lm_kana_part = canonical_yomi;
-                            for s in counter_surfaces {
-                                kanjis.push((*s).to_string());
+                            if let Some(counter_surfaces) = counter_surfaces_for(canonical_yomi) {
+                                for s in counter_surfaces {
+                                    kanjis.push((*s).to_string());
+                                }
                             }
                         }
 

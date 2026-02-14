@@ -13,6 +13,7 @@ pub mod kana_trie;
 pub mod kansuji;
 pub mod keymap;
 pub mod lm;
+pub mod numeric_counter;
 mod resource;
 pub mod romkan;
 pub mod search_result;

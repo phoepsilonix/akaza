@@ -2,6 +2,7 @@ use rustc_hash::FxHashMap;
 
 use crate::cost::calc_cost;
 use crate::graph::candidate::Candidate;
+use crate::numeric_counter::normalize_counter_key_for_lm;
 
 #[derive(Default)]
 pub(crate) struct UniGramUserStats {
@@ -32,14 +33,18 @@ impl UniGramUserStats {
      * ノードコストを計算する。
      */
     pub(crate) fn get_cost(&self, key: &str) -> Option<f32> {
-        let count = self.word_count.get(key)?;
-
+        if let Some(count) = self.word_count.get(key) {
+            return Some(calc_cost(*count, self.unique_words, self.total_words));
+        }
+        let normalized_key = normalize_counter_key_for_lm(key)?;
+        let count = self.word_count.get(&normalized_key)?;
         Some(calc_cost(*count, self.unique_words, self.total_words))
     }
 
     pub(crate) fn record_entries(&mut self, candidates: &[Candidate]) {
         for candidate in candidates {
-            let key = candidate.key();
+            let raw_key = candidate.key();
+            let key = normalize_counter_key_for_lm(&raw_key).unwrap_or(raw_key);
             if let Some(i) = self.word_count.get(&key) {
                 self.word_count.insert(key, i + 1);
             } else {
