@@ -3,7 +3,7 @@
 [Akaza](https://github.com/akaza-im/akaza) (Japanese kana-kanji conversion engine) 用の n-gram 統計データを生成するパイプラインです。
 
 日本語 Wikipedia、青空文庫、CC-100 Japanese のテキストをトーカナイズし、unigram/bigram の wordcnt trie と語彙ファイルを生成します。
-生成物は [akaza-default-model](https://github.com/akaza-im/akaza-default-model) で `learn-corpus` の入力として使用されます。
+生成物は [`default-model/`](../default-model/) で `learn-corpus` の入力として使用されます。
 
 ## 生成物
 
