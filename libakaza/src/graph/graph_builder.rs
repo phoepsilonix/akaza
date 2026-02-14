@@ -12,83 +12,11 @@ use crate::kansuji::int2kanji;
 use crate::lm::base::{SystemBigramLM, SystemUnigramLM};
 use crate::numeric_counter::{
     counter_surfaces_for, normalize_counter_key_for_lm, normalize_counter_yomi,
+    parse_kana_numeric_prefix_before_counter, parse_numeric_prefix_surface, to_fullwidth_digits,
 };
 use crate::user_side_data::user_data::UserData;
 use kelp::{hira2kata, ConvOption};
 use log::trace;
-
-#[derive(Debug, Clone)]
-struct NumericPrefix {
-    value: i64,
-    ascii_digits: String,
-    consumed_len: usize,
-}
-
-fn fullwidth_to_ascii(ch: char) -> Option<char> {
-    if ('０'..='９').contains(&ch) {
-        Some(char::from_u32((ch as u32) - ('０' as u32) + ('0' as u32)).unwrap())
-    } else {
-        None
-    }
-}
-
-fn to_fullwidth_digits(s: &str) -> String {
-    s.chars()
-        .map(|c| {
-            if c.is_ascii_digit() {
-                char::from_u32((c as u32) - ('0' as u32) + ('０' as u32)).unwrap()
-            } else {
-                c
-            }
-        })
-        .collect()
-}
-
-fn parse_numeric_prefix(s: &str) -> Option<NumericPrefix> {
-    let mut ascii = String::new();
-    let mut end = 0;
-    for (idx, ch) in s.char_indices() {
-        if ch.is_ascii_digit() {
-            ascii.push(ch);
-            end = idx + ch.len_utf8();
-            continue;
-        }
-        if let Some(a) = fullwidth_to_ascii(ch) {
-            ascii.push(a);
-            end = idx + ch.len_utf8();
-            continue;
-        }
-        break;
-    }
-    if !ascii.is_empty() {
-        if let Ok(value) = ascii.parse::<i64>() {
-            return Some(NumericPrefix {
-                value,
-                ascii_digits: ascii,
-                consumed_len: end,
-            });
-        }
-    }
-    for (prefix, value) in [
-        ("ひゃく", 100_i64),
-        ("ひゃっ", 100_i64),
-        ("ぜろ", 0_i64),
-        ("れい", 0_i64),
-    ] {
-        if s.starts_with(prefix) {
-            return Some(NumericPrefix {
-                value,
-                ascii_digits: value.to_string(),
-                consumed_len: prefix.len(),
-            });
-        }
-    }
-    None
-}
-
-fn leading_numeric_len(s: &str) -> usize {
-    parse_numeric_prefix(s).map(|n| n.consumed_len).unwrap_or(0)
-}
 
 /// surface が数字+接尾辞の場合、LM lookup 用のキーを `<NUM>` 正規化する。
 /// `libakaza` は `akaza-data` に依存しないため、同等のロジックをインラインで持つ。
@@ -106,7 +34,9 @@ fn normalize_surface_for_lm(key: &str) -> Option<String> {
     let slash_pos = key.find('/')?;
     let surface = &key[..slash_pos];
     let reading = &key[slash_pos + 1..];
-    let surface_prefix_end = leading_numeric_len(surface);
+    let surface_prefix_end = parse_numeric_prefix_surface(surface)
+        .map(|p| p.consumed_len)
+        .unwrap_or(0);
     if surface_prefix_end == 0 {
         return None;
     }
@@ -116,7 +46,12 @@ fn normalize_surface_for_lm(key: &str) -> Option<String> {
         None
     } else {
         // reading 側も先頭の数字部分を <NUM> に置換し、かな読みを保持
-        let reading_prefix_end = leading_numeric_len(reading);
+        let reading_prefix_end = parse_numeric_prefix_surface(reading)
+            .map(|p| p.consumed_len)
+            .unwrap_or(0);
+        if reading_prefix_end == 0 {
+            return None;
+        }
         let reading_suffix = &reading[reading_prefix_end..];
         Some(format!("<NUM>{surface_suffix}/<NUM>{reading_suffix}"))
     }
@@ -243,7 +178,9 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
                 }
 
                 // 数字トークン: 数値表記候補（半角/全角/漢数字）を補完する
-                if let Some(numeric) = parse_numeric_prefix(segmented_yomi) {
+                if let Some(numeric) = parse_numeric_prefix_surface(segmented_yomi)
+                    .or_else(|| parse_kana_numeric_prefix_before_counter(segmented_yomi))
+                {
                     let start_pos = (end_pos - segmented_yomi.len()) as i32;
                     if numeric.consumed_len == segmented_yomi.len() {
                         let fullwidth = to_fullwidth_digits(&numeric.ascii_digits);
@@ -539,6 +476,17 @@ mod tests {
         assert!(got_surfaces2.contains(&"516週間".to_string()));
         assert!(got_surfaces2.contains(&"５１６週間".to_string()));
         assert!(got_surfaces2.contains(&"五百十六週間".to_string()));
+
+        let yomi3 = "にせんにじゅうろくしゅうかん";
+        let got3 = graph_builder.construct(
+            yomi3,
+            &SegmentationResult::new(BTreeMap::from([(42, vec![yomi3.to_string()])])),
+        );
+        let nodes3 = got3.node_list(42).unwrap();
+        let got_surfaces3: Vec<String> = nodes3.iter().map(|f| f.surface.to_string()).collect();
+        assert!(got_surfaces3.contains(&"2026週間".to_string()));
+        assert!(got_surfaces3.contains(&"２０２６週間".to_string()));
+        assert!(got_surfaces3.contains(&"二千二十六週間".to_string()));
         Ok(())
     }
 }

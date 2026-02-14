@@ -5,9 +5,11 @@ use rustc_hash::FxHashSet;
 use std::sync::{Arc, Mutex};
 
 use log::{debug, info, trace, warn};
-use regex::Regex;
 
 use crate::kana_trie::base::KanaTrie;
+use crate::numeric_counter::{
+    counter_yomi_aliases, parse_kana_numeric_prefix_before_counter, parse_numeric_prefix_surface,
+};
 
 #[derive(PartialEq, Debug)]
 pub struct SegmentationResult {
@@ -40,41 +42,12 @@ impl SegmentationResult {
 
 pub struct Segmenter {
     tries: Vec<Arc<Mutex<dyn KanaTrie>>>,
-    number_pattern: Regex,
-}
-
-const COUNTER_YOMI_PREFIXES: [&str; 4] = ["ひき", "びき", "ぴき", "しゅうかん"];
-
-fn fullwidth_digit_prefix_len(s: &str) -> usize {
-    let mut end = 0;
-    for (idx, ch) in s.char_indices() {
-        if ('０'..='９').contains(&ch) {
-            end = idx + ch.len_utf8();
-        } else {
-            break;
-        }
-    }
-    end
-}
-
-fn kana_numeral_prefix_len(s: &str) -> usize {
-    // 段階導入: まずは要件で必要な最小セットだけ扱う。
-    for pat in ["ひゃく", "ひゃっ", "ぜろ", "れい"] {
-        if s.starts_with(pat) {
-            return pat.len();
-        }
-    }
-    0
 }
 
 impl Segmenter {
     pub fn new(tries: Vec<Arc<Mutex<dyn KanaTrie>>>) -> Segmenter {
         info!("Registering tries for Segmenter: {}", tries.len());
-        let number_pattern = Regex::new(r"^(?:0|[1-9][0-9]*)(\.[0-9]*)?").unwrap();
-        Segmenter {
-            tries,
-            number_pattern,
-        }
+        Segmenter { tries }
     }
 
     /**
@@ -148,19 +121,11 @@ impl Segmenter {
             }
 
             candidates.clear();
-            let numeric_len = if let Some(captured) = self.number_pattern.captures(yomi) {
-                captured.get(0).map(|m| m.as_str().len()).unwrap_or(0)
-            } else {
-                let fw_len = fullwidth_digit_prefix_len(yomi);
-                if fw_len > 0 {
-                    fw_len
-                } else {
-                    kana_numeral_prefix_len(yomi)
-                }
-            };
-            if numeric_len > 0 {
+            let numeric_prefix = parse_numeric_prefix_surface(yomi)
+                .or_else(|| parse_kana_numeric_prefix_before_counter(yomi));
+            if let Some(prefix) = numeric_prefix {
                 // 数字は一つの単語として処理する。
-                let s = &yomi[..numeric_len];
+                let s = &yomi[..prefix.consumed_len];
                 candidates.insert(s.to_string());
 
                 // 数字の後にかなが続く場合、複合セグメント（例: "90ぎょう"）も追加する。
@@ -175,7 +140,7 @@ impl Segmenter {
                         }
                     }
                     // 助数詞はコーパス外でも扱いたいので、最小セットを規則で補完する。
-                    for counter_yomi in COUNTER_YOMI_PREFIXES {
+                    for counter_yomi in counter_yomi_aliases() {
                         if after_num.starts_with(counter_yomi) {
                             candidates.insert(format!("{s}{counter_yomi}"));
                         }
