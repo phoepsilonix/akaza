@@ -5,9 +5,11 @@ use rustc_hash::FxHashSet;
 use std::sync::{Arc, Mutex};
 
 use log::{debug, info, trace, warn};
-use regex::Regex;
 
 use crate::kana_trie::base::KanaTrie;
+use crate::numeric_counter::{
+    counter_yomi_aliases, parse_kana_numeric_prefix_before_counter, parse_numeric_prefix_surface,
+};
 
 #[derive(PartialEq, Debug)]
 pub struct SegmentationResult {
@@ -40,17 +42,12 @@ impl SegmentationResult {
 
 pub struct Segmenter {
     tries: Vec<Arc<Mutex<dyn KanaTrie>>>,
-    number_pattern: Regex,
 }
 
 impl Segmenter {
     pub fn new(tries: Vec<Arc<Mutex<dyn KanaTrie>>>) -> Segmenter {
         info!("Registering tries for Segmenter: {}", tries.len());
-        let number_pattern = Regex::new(r"^(?:0|[1-9][0-9]*)(\.[0-9]*)?").unwrap();
-        Segmenter {
-            tries,
-            number_pattern,
-        }
+        Segmenter { tries }
     }
 
     /**
@@ -124,9 +121,22 @@ impl Segmenter {
             }
 
             candidates.clear();
-            if let Some(captured) = self.number_pattern.captures(yomi) {
+
+            // ASCII/全角数字プレフィックスの検出（明確なので排他的に処理）
+            let ascii_numeric_prefix = parse_numeric_prefix_surface(yomi);
+            // かな数詞プレフィックスの検出（曖昧性があるので trie 探索と並行）
+            let kana_numeric_prefix = if ascii_numeric_prefix.is_none() {
+                parse_kana_numeric_prefix_before_counter(yomi)
+            } else {
+                None
+            };
+
+            if let Some(prefix) = ascii_numeric_prefix
+                .as_ref()
+                .or(kana_numeric_prefix.as_ref())
+            {
                 // 数字は一つの単語として処理する。
-                let s = captured.get(0).unwrap().as_str();
+                let s = &yomi[..prefix.consumed_len];
                 candidates.insert(s.to_string());
 
                 // 数字の後にかなが続く場合、複合セグメント（例: "90ぎょう"）も追加する。
@@ -140,8 +150,25 @@ impl Segmenter {
                             candidates.insert(compound);
                         }
                     }
+                    // 助数詞はコーパス外でも扱いたいので、最小セットを規則で補完する。
+                    // かな数詞パスの場合は完全一致のみ（starts_with だと「じょう」→「じ」誤爆）。
+                    let require_exact = kana_numeric_prefix.is_some();
+                    for counter_yomi in counter_yomi_aliases() {
+                        if require_exact {
+                            if after_num == *counter_yomi {
+                                candidates.insert(format!("{s}{counter_yomi}"));
+                            }
+                        } else if after_num.starts_with(counter_yomi) {
+                            candidates.insert(format!("{s}{counter_yomi}"));
+                        }
+                    }
                 }
-            } else {
+            }
+
+            // かな数詞の場合は曖昧性があるため、trie 探索も並行して行い
+            // Viterbi に両方の解釈を渡す。
+            // ASCII/全角数字の場合は明確なので trie 探索は不要。
+            if ascii_numeric_prefix.is_none() {
                 for trie in &self.tries {
                     let got = trie.lock().unwrap().common_prefix_search(yomi);
                     debug!("Common prefix search: {:?}", got);
@@ -264,6 +291,45 @@ mod tests {
         assert!(ends_at_11.contains(&"90ぎょう".to_string()));
         // 数字単体も存在する
         assert!(graph.base.get(&2).unwrap().contains(&"90".to_string()));
+    }
+
+    #[test]
+    fn test_fullwidth_number_with_kana_suffix() {
+        let kana_trie = CedarwoodKanaTrie::build(vec!["しゅうかん".to_string()]);
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph = segmenter.build("５１６しゅうかん", None);
+        assert!(graph.base.get(&9).unwrap().contains(&"５１６".to_string()));
+        assert!(graph
+            .base
+            .get(&24)
+            .unwrap()
+            .contains(&"５１６しゅうかん".to_string()));
+    }
+
+    #[test]
+    fn test_kana_numeral_with_counter_suffix() {
+        let kana_trie = CedarwoodKanaTrie::build(vec![]);
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph = segmenter.build("ぜろひき", None);
+        assert!(graph.base.get(&6).unwrap().contains(&"ぜろ".to_string()));
+        assert!(graph
+            .base
+            .get(&12)
+            .unwrap()
+            .contains(&"ぜろひき".to_string()));
+    }
+
+    #[test]
+    fn test_kana_numeral_with_fun_counter_suffix() {
+        let kana_trie = CedarwoodKanaTrie::build(vec![]);
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph = segmenter.build("じゅっぷん", None);
+        assert!(graph.base.get(&9).unwrap().contains(&"じゅっ".to_string()));
+        assert!(graph
+            .base
+            .get(&15)
+            .unwrap()
+            .contains(&"じゅっぷん".to_string()));
     }
 
     #[test]

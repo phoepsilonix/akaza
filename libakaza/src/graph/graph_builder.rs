@@ -10,6 +10,10 @@ use crate::graph::word_node::{WordNode, BOS_TOKEN_KEY, EOS_TOKEN_KEY};
 use crate::kana_kanji::base::KanaKanjiDict;
 use crate::kansuji::int2kanji;
 use crate::lm::base::{SystemBigramLM, SystemUnigramLM};
+use crate::numeric_counter::{
+    counter_surfaces_for, normalize_counter_key_for_lm, normalize_counter_yomi,
+    parse_kana_numeric_prefix_before_counter, parse_numeric_prefix_surface, to_fullwidth_digits,
+};
 use crate::user_side_data::user_data::UserData;
 use kelp::{hira2kata, ConvOption};
 use log::trace;
@@ -23,21 +27,32 @@ use log::trace;
 /// surface 側は漢字接尾辞を保持し、reading 側はかな読みを保持する。
 /// - `"90行/90ぎょう"` → `"<NUM>行/<NUM>ぎょう"`
 fn normalize_surface_for_lm(key: &str) -> Option<String> {
+    if let Some(normalized_counter) = normalize_counter_key_for_lm(key) {
+        return Some(normalized_counter);
+    }
+
     let slash_pos = key.find('/')?;
     let surface = &key[..slash_pos];
     let reading = &key[slash_pos + 1..];
-    let digit_end = surface.bytes().take_while(|b| b.is_ascii_digit()).count();
-    if digit_end == 0 {
+    let surface_prefix_end = parse_numeric_prefix_surface(surface)
+        .map(|p| p.consumed_len)
+        .unwrap_or(0);
+    if surface_prefix_end == 0 {
         return None;
     }
-    let surface_suffix = &surface[digit_end..];
+    let surface_suffix = &surface[surface_prefix_end..];
     if surface_suffix.is_empty() {
         // 裸の数字はフォールバックしない
         None
     } else {
         // reading 側も先頭の数字部分を <NUM> に置換し、かな読みを保持
-        let reading_digit_end = reading.bytes().take_while(|b| b.is_ascii_digit()).count();
-        let reading_suffix = &reading[reading_digit_end..];
+        let reading_prefix_end = parse_numeric_prefix_surface(reading)
+            .map(|p| p.consumed_len)
+            .unwrap_or(0);
+        if reading_prefix_end == 0 {
+            return None;
+        }
+        let reading_suffix = &reading[reading_prefix_end..];
         Some(format!("<NUM>{surface_suffix}/<NUM>{reading_suffix}"))
     }
 }
@@ -162,107 +177,88 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
                     vec.push(node);
                 }
 
-                // 純粋な数字の場合のみ漢数字候補を静的に生成する
-                if !segmented_yomi.is_empty() && segmented_yomi.bytes().all(|b| b.is_ascii_digit())
+                // 数字トークン: 数値表記候補（半角/全角/漢数字）を補完する
+                if let Some(numeric) = parse_numeric_prefix_surface(segmented_yomi)
+                    .or_else(|| parse_kana_numeric_prefix_before_counter(segmented_yomi))
                 {
-                    if let Ok(n) = segmented_yomi.parse::<i64>() {
-                        let kansuji = int2kanji(n);
+                    let start_pos = (end_pos - segmented_yomi.len()) as i32;
+                    if numeric.consumed_len == segmented_yomi.len() {
+                        let fullwidth = to_fullwidth_digits(&numeric.ascii_digits);
+                        if !seen.contains(&fullwidth) {
+                            vec.push(WordNode::new(
+                                start_pos,
+                                &fullwidth,
+                                segmented_yomi,
+                                None,
+                                true,
+                            ));
+                            seen.insert(fullwidth);
+                        }
+                        let kansuji = int2kanji(numeric.value);
                         if !seen.contains(&kansuji) {
-                            let node = WordNode::new(
-                                (end_pos - segmented_yomi.len()) as i32,
+                            vec.push(WordNode::new(
+                                start_pos,
                                 &kansuji,
                                 segmented_yomi,
                                 None,
                                 true,
-                            );
-                            vec.push(node);
+                            ));
+                            seen.insert(kansuji);
                         }
                     }
-                }
 
-                // 数字+かな複合セグメント（例: "90ぎょう"）の処理
-                // 数字部分とかな部分を分離し、かな部分を辞書で変換して候補を生成する
-                {
-                    let digit_end = segmented_yomi
-                        .bytes()
-                        .take_while(|b| b.is_ascii_digit())
-                        .count();
-                    if digit_end > 0 && digit_end < segmented_yomi.len() {
-                        let num_str = &segmented_yomi[..digit_end];
-                        let kana_part = &segmented_yomi[digit_end..];
-                        let start_pos = (end_pos - segmented_yomi.len()) as i32;
+                    // 数字+かな複合セグメント（例: "90ぎょう", "５１６しゅうかん", "ぜろひき"）
+                    if numeric.consumed_len < segmented_yomi.len() {
+                        let kana_part = &segmented_yomi[numeric.consumed_len..];
+                        let mut kanjis: Vec<String> = Vec::new();
+                        let mut lm_kana_part = kana_part;
 
-                        // かな部分を辞書で検索して漢字候補を取得
-                        if let Some(kanjis) = self.system_kana_kanji_dict.get(kana_part) {
-                            for kanji in &kanjis {
-                                let compound_surface = format!("{}{}", num_str, kanji);
-                                if seen.contains(&compound_surface) {
+                        if let Some(from_dict) = self.system_kana_kanji_dict.get(kana_part) {
+                            kanjis.extend(from_dict.iter().cloned());
+                        }
+                        if let Some(canonical_yomi) = normalize_counter_yomi(kana_part) {
+                            lm_kana_part = canonical_yomi;
+                            if let Some(counter_surfaces) = counter_surfaces_for(canonical_yomi) {
+                                for s in counter_surfaces {
+                                    kanjis.push((*s).to_string());
+                                }
+                            }
+                        }
+
+                        let mut seen_kanji: FxHashSet<String> = FxHashSet::default();
+                        for kanji in kanjis {
+                            if !seen_kanji.insert(kanji.clone()) {
+                                continue;
+                            }
+                            let ascii_surface = format!("{}{}", numeric.ascii_digits, kanji);
+                            let fullwidth_surface =
+                                format!("{}{}", to_fullwidth_digits(&numeric.ascii_digits), kanji);
+                            let kansuji_surface = format!("{}{}", int2kanji(numeric.value), kanji);
+
+                            let reading_for_lm =
+                                format!("{}{}", numeric.ascii_digits, lm_kana_part);
+                            key_buf.clear();
+                            key_buf.push_str(&ascii_surface);
+                            key_buf.push('/');
+                            key_buf.push_str(&reading_for_lm);
+                            let word_id_and_score =
+                                self.system_unigram_lm.find(&key_buf).or_else(|| {
+                                    normalize_surface_for_lm(&key_buf)
+                                        .and_then(|nk| self.system_unigram_lm.find(&nk))
+                                });
+
+                            for surface in [&ascii_surface, &fullwidth_surface, &kansuji_surface] {
+                                if seen.contains(surface) {
                                     continue;
                                 }
-                                // LM key: "90行/90ぎょう" → normalize → "<NUM>行/<NUM>ぎょう"
-                                key_buf.clear();
-                                key_buf.push_str(&compound_surface);
-                                key_buf.push('/');
-                                key_buf.push_str(segmented_yomi);
-                                let word_id_and_score =
-                                    self.system_unigram_lm.find(&key_buf).or_else(|| {
-                                        normalize_surface_for_lm(&key_buf)
-                                            .and_then(|nk| self.system_unigram_lm.find(&nk))
-                                    });
-                                let node = WordNode::new(
+                                vec.push(WordNode::new(
                                     start_pos,
-                                    &compound_surface,
+                                    surface,
                                     segmented_yomi,
                                     word_id_and_score,
                                     false,
-                                );
-                                vec.push(node);
-                                seen.insert(compound_surface);
-                            }
-                        }
-
-                        // 漢数字候補も追加（例: "九十行"）
-                        if let Ok(n) = num_str.parse::<i64>() {
-                            let kanji_num = int2kanji(n);
-                            if let Some(kanjis) = self.system_kana_kanji_dict.get(kana_part) {
-                                for kanji in &kanjis {
-                                    let kansuji_surface = format!("{}{}", kanji_num, kanji);
-                                    if seen.contains(&kansuji_surface) {
-                                        continue;
-                                    }
-                                    // LM lookup: same normalized key "<NUM>行/<NUM>ぎょう"
-                                    key_buf.clear();
-                                    key_buf.push_str(&kansuji_surface);
-                                    key_buf.push('/');
-                                    key_buf.push_str(segmented_yomi);
-                                    let word_id_and_score =
-                                        self.system_unigram_lm.find(&key_buf).or_else(|| {
-                                            normalize_surface_for_lm(&key_buf)
-                                                .and_then(|nk| self.system_unigram_lm.find(&nk))
-                                        });
-                                    let node = WordNode::new(
-                                        start_pos,
-                                        &kansuji_surface,
-                                        segmented_yomi,
-                                        word_id_and_score,
-                                        false,
-                                    );
-                                    vec.push(node);
-                                    seen.insert(kansuji_surface);
-                                }
-                            }
-                            // かな部分そのままの漢数字候補（例: "九十ぎょう"）
-                            let kansuji_kana = format!("{}{}", kanji_num, kana_part);
-                            if !seen.contains(&kansuji_kana) {
-                                let node = WordNode::new(
-                                    start_pos,
-                                    &kansuji_kana,
-                                    segmented_yomi,
-                                    None,
-                                    true,
-                                );
-                                vec.push(node);
-                                seen.insert(kansuji_kana);
+                                ));
+                                seen.insert(surface.to_string());
                             }
                         }
                     }
@@ -428,7 +424,91 @@ mod tests {
         );
         // 裸の数字はフォールバックしない（スコア集約による退行を防止）
         assert_eq!(normalize_surface_for_lm("1/1"), None);
+        assert_eq!(
+            normalize_surface_for_lm("５１６週間/５１６しゅうかん"),
+            Some("<NUM>週間/<NUM>しゅうかん".to_string())
+        );
+        assert_eq!(
+            normalize_surface_for_lm("0匹/ぜろひき"),
+            Some("<NUM>匹/<NUM>ひき".to_string())
+        );
         assert_eq!(normalize_surface_for_lm("匹/ひき"), None);
         assert_eq!(normalize_surface_for_lm("第1回/だい1かい"), None);
+    }
+
+    #[test]
+    fn test_numeric_counter_variants() -> anyhow::Result<()> {
+        let graph_builder = GraphBuilder::new(
+            HashmapVecKanaKanjiDict::new(HashMap::new()),
+            HashmapVecKanaKanjiDict::new(HashMap::new()),
+            Arc::new(Mutex::new(UserData::default())),
+            Rc::new(
+                MarisaSystemUnigramLMBuilder::default()
+                    .set_unique_words(20)
+                    .set_total_words(19)
+                    .build()?,
+            ),
+            Rc::new(
+                MarisaSystemBigramLMBuilder::default()
+                    .set_default_edge_cost(20_f32)
+                    .build()?,
+            ),
+        );
+
+        let yomi = "ぜろひき";
+        let got = graph_builder.construct(
+            yomi,
+            &SegmentationResult::new(BTreeMap::from([(12, vec![yomi.to_string()])])),
+        );
+        let nodes = got.node_list(12).unwrap();
+        let got_surfaces: Vec<String> = nodes.iter().map(|f| f.surface.to_string()).collect();
+        assert!(got_surfaces.contains(&"0匹".to_string()));
+        assert!(got_surfaces.contains(&"０匹".to_string()));
+        assert!(got_surfaces.contains(&"零匹".to_string()));
+
+        let yomi2 = "516しゅうかん";
+        let got2 = graph_builder.construct(
+            yomi2,
+            &SegmentationResult::new(BTreeMap::from([(18, vec![yomi2.to_string()])])),
+        );
+        let nodes2 = got2.node_list(18).unwrap();
+        let got_surfaces2: Vec<String> = nodes2.iter().map(|f| f.surface.to_string()).collect();
+        assert!(got_surfaces2.contains(&"516週間".to_string()));
+        assert!(got_surfaces2.contains(&"５１６週間".to_string()));
+        assert!(got_surfaces2.contains(&"五百十六週間".to_string()));
+
+        let yomi3 = "にせんにじゅうろくしゅうかん";
+        let got3 = graph_builder.construct(
+            yomi3,
+            &SegmentationResult::new(BTreeMap::from([(42, vec![yomi3.to_string()])])),
+        );
+        let nodes3 = got3.node_list(42).unwrap();
+        let got_surfaces3: Vec<String> = nodes3.iter().map(|f| f.surface.to_string()).collect();
+        assert!(got_surfaces3.contains(&"2026週間".to_string()));
+        assert!(got_surfaces3.contains(&"２０２６週間".to_string()));
+        assert!(got_surfaces3.contains(&"二千二十六週間".to_string()));
+
+        let yomi4 = "3ぼん";
+        let got4 = graph_builder.construct(
+            yomi4,
+            &SegmentationResult::new(BTreeMap::from([(7, vec![yomi4.to_string()])])),
+        );
+        let nodes4 = got4.node_list(7).unwrap();
+        let got_surfaces4: Vec<String> = nodes4.iter().map(|f| f.surface.to_string()).collect();
+        assert!(got_surfaces4.contains(&"3本".to_string()));
+        assert!(got_surfaces4.contains(&"３本".to_string()));
+        assert!(got_surfaces4.contains(&"三本".to_string()));
+
+        let yomi5 = "じゅっぷん";
+        let got5 = graph_builder.construct(
+            yomi5,
+            &SegmentationResult::new(BTreeMap::from([(15, vec![yomi5.to_string()])])),
+        );
+        let nodes5 = got5.node_list(15).unwrap();
+        let got_surfaces5: Vec<String> = nodes5.iter().map(|f| f.surface.to_string()).collect();
+        assert!(got_surfaces5.contains(&"10分".to_string()));
+        assert!(got_surfaces5.contains(&"１０分".to_string()));
+        assert!(got_surfaces5.contains(&"十分".to_string()));
+        Ok(())
     }
 }

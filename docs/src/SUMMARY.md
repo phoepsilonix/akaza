@@ -19,6 +19,7 @@
     - [K-Best セグメンテーション](internals/notes/k-best-segmentation.md)
     - [リランキング](internals/notes/reranking.md)
     - [リランキング評価レポート](internals/notes/reranking-evaluation-report.md)
+    - [数値+助数詞変換の再設計](internals/notes/numeric-counter-redesign.md)
     - [構造化パーセプトロン](internals/notes/structured-perceptron.md)
     - [learn-corpus 改善実験](internals/notes/learn-corpus-improvement.md)
     - [構造化パーセプトロン評価レポート](internals/notes/structured-perceptron-evaluation.md)

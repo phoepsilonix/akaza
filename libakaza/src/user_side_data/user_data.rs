@@ -324,4 +324,18 @@ mod tests {
         info!("{}, {}", cost2, cost3);
         assert!(cost2 > cost3);
     }
+
+    #[test]
+    fn test_counter_learning_generalizes_across_numbers() {
+        let mut user_data = UserData::default();
+        user_data.record_entries(&[Candidate::new("3しゅうかん", "3週間", 0.0)]);
+
+        let learned =
+            user_data.get_unigram_cost(&WordNode::new(0, "3週間", "3しゅうかん", None, false));
+        assert!(learned.is_some());
+
+        let generalized =
+            user_data.get_unigram_cost(&WordNode::new(0, "516週間", "516しゅうかん", None, false));
+        assert!(generalized.is_some());
+    }
 }
