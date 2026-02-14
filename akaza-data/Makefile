@@ -11,12 +11,12 @@ work/vibrato/ipadic-mecab-2_7_0/system.dic: work/vibrato/ipadic-mecab-2_7_0.tar.
 
 evaluate:
 	cargo run --release -- evaluate \
-		 --corpus=anthy-corpus/corpus.0.txt \
-		 --corpus=anthy-corpus/corpus.1.txt \
-		 --corpus=anthy-corpus/corpus.2.txt \
-		 --corpus=anthy-corpus/corpus.3.txt \
-		 --corpus=anthy-corpus/corpus.4.txt \
-		 --corpus=anthy-corpus/corpus.5.txt \
+		 --corpus=../default-model/anthy-corpus/corpus.0.txt \
+		 --corpus=../default-model/anthy-corpus/corpus.1.txt \
+		 --corpus=../default-model/anthy-corpus/corpus.2.txt \
+		 --corpus=../default-model/anthy-corpus/corpus.3.txt \
+		 --corpus=../default-model/anthy-corpus/corpus.4.txt \
+		 --corpus=../default-model/anthy-corpus/corpus.5.txt \
 		 --eucjp-dict=/usr/share/skk/SKK-JISYO.L \
 		 -v
 

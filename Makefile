@@ -42,6 +42,16 @@ install-resources:
 	install -m 0644 -v -D -t $(DATADIR)/akaza/romkan romkan/*
 	install -m 0644 -v -D -t $(DATADIR)/akaza/keymap keymap/*
 
+# default-model convenience targets
+model:
+	$(MAKE) -C default-model
+
+evaluate:
+	$(MAKE) -C default-model evaluate
+
+corpus-stats:
+	$(MAKE) -C corpus-stats
+
 clean:
 	cargo clean
 	$(MAKE) -C ibus-akaza clean
@@ -72,5 +82,6 @@ docs-serve:
 	cd docs && mdbook serve --open
 
 .PHONY: all build dev dev-run dev-setup install install-model install-resources clean \
+	model evaluate corpus-stats \
 	docker-test-build docker-test docker-test-unit docker-test-integration docker-test-e2e docker-test-shell \
 	docs-build docs-serve

@@ -1,0 +1,17 @@
+name: Validate model data files
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'default-model/training-corpus/**'
+      - 'default-model/dict/SKK-JISYO.akaza'
+      - 'default-model/scripts/validate.py'
+      - '.github/workflows/validate-model.yml'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - run: python3 default-model/scripts/validate.py
