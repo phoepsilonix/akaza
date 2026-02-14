@@ -298,6 +298,19 @@ mod tests {
     }
 
     #[test]
+    fn test_kana_numeral_with_fun_counter_suffix() {
+        let kana_trie = CedarwoodKanaTrie::build(vec![]);
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph = segmenter.build("じゅっぷん", None);
+        assert!(graph.base.get(&9).unwrap().contains(&"じゅっ".to_string()));
+        assert!(graph
+            .base
+            .get(&15)
+            .unwrap()
+            .contains(&"じゅっぷん".to_string()));
+    }
+
+    #[test]
     fn test_force() -> anyhow::Result<()> {
         // env_logger::Env::default().filter_or(env_logger::DEFAULT_FILTER_ENV, "info");
         // env_logger::builder().is_test(true).try_init()?;

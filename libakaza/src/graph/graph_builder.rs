@@ -487,6 +487,28 @@ mod tests {
         assert!(got_surfaces3.contains(&"2026週間".to_string()));
         assert!(got_surfaces3.contains(&"２０２６週間".to_string()));
         assert!(got_surfaces3.contains(&"二千二十六週間".to_string()));
+
+        let yomi4 = "3ぼん";
+        let got4 = graph_builder.construct(
+            yomi4,
+            &SegmentationResult::new(BTreeMap::from([(7, vec![yomi4.to_string()])])),
+        );
+        let nodes4 = got4.node_list(7).unwrap();
+        let got_surfaces4: Vec<String> = nodes4.iter().map(|f| f.surface.to_string()).collect();
+        assert!(got_surfaces4.contains(&"3本".to_string()));
+        assert!(got_surfaces4.contains(&"３本".to_string()));
+        assert!(got_surfaces4.contains(&"三本".to_string()));
+
+        let yomi5 = "じゅっぷん";
+        let got5 = graph_builder.construct(
+            yomi5,
+            &SegmentationResult::new(BTreeMap::from([(15, vec![yomi5.to_string()])])),
+        );
+        let nodes5 = got5.node_list(15).unwrap();
+        let got_surfaces5: Vec<String> = nodes5.iter().map(|f| f.surface.to_string()).collect();
+        assert!(got_surfaces5.contains(&"10分".to_string()));
+        assert!(got_surfaces5.contains(&"１０分".to_string()));
+        assert!(got_surfaces5.contains(&"十分".to_string()));
         Ok(())
     }
 }

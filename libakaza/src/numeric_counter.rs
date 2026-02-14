@@ -5,9 +5,172 @@ pub struct NumericPrefix {
     pub consumed_len: usize,
 }
 
-const COUNTER_SURFACES_HIKI: [&str; 1] = ["匹"];
-const COUNTER_SURFACES_SHUKAN: [&str; 1] = ["週間"];
-const COUNTER_YOMI_ALIASES: [&str; 4] = ["ひき", "びき", "ぴき", "しゅうかん"];
+struct CounterDef {
+    canonical: &'static str,
+    aliases: &'static [&'static str],
+    surfaces: &'static [&'static str],
+}
+
+const COUNTER_DEFS: &[CounterDef] = &[
+    CounterDef {
+        canonical: "ひき",
+        aliases: &["ひき", "びき", "ぴき"],
+        surfaces: &["匹"],
+    },
+    CounterDef {
+        canonical: "にん",
+        aliases: &["にん"],
+        surfaces: &["人"],
+    },
+    CounterDef {
+        canonical: "ほん",
+        aliases: &["ほん", "ぼん", "ぽん"],
+        surfaces: &["本"],
+    },
+    CounterDef {
+        canonical: "まい",
+        aliases: &["まい"],
+        surfaces: &["枚"],
+    },
+    CounterDef {
+        canonical: "だい",
+        aliases: &["だい"],
+        surfaces: &["台"],
+    },
+    CounterDef {
+        canonical: "かい",
+        aliases: &["かい"],
+        surfaces: &["回"],
+    },
+    CounterDef {
+        canonical: "かいめ",
+        aliases: &["かいめ"],
+        surfaces: &["回目"],
+    },
+    CounterDef {
+        canonical: "こ",
+        aliases: &["こ"],
+        surfaces: &["個"],
+    },
+    CounterDef {
+        canonical: "さつ",
+        aliases: &["さつ"],
+        surfaces: &["冊"],
+    },
+    CounterDef {
+        canonical: "とう",
+        aliases: &["とう"],
+        surfaces: &["頭"],
+    },
+    CounterDef {
+        canonical: "わ",
+        aliases: &["わ"],
+        surfaces: &["羽"],
+    },
+    CounterDef {
+        canonical: "ちゃく",
+        aliases: &["ちゃく"],
+        surfaces: &["着"],
+    },
+    CounterDef {
+        canonical: "けん",
+        aliases: &["けん"],
+        surfaces: &["件"],
+    },
+    CounterDef {
+        canonical: "しゅう",
+        aliases: &["しゅう"],
+        surfaces: &["週"],
+    },
+    CounterDef {
+        canonical: "しゅうかん",
+        aliases: &["しゅうかん"],
+        surfaces: &["週間"],
+    },
+    CounterDef {
+        canonical: "ねん",
+        aliases: &["ねん"],
+        surfaces: &["年"],
+    },
+    CounterDef {
+        canonical: "かげつ",
+        aliases: &["かげつ"],
+        surfaces: &["か月", "ヶ月", "箇月"],
+    },
+    CounterDef {
+        canonical: "にち",
+        aliases: &["にち"],
+        surfaces: &["日"],
+    },
+    CounterDef {
+        canonical: "じ",
+        aliases: &["じ"],
+        surfaces: &["時"],
+    },
+    CounterDef {
+        canonical: "ふん",
+        aliases: &["ふん", "ぷん"],
+        surfaces: &["分"],
+    },
+    CounterDef {
+        canonical: "びょう",
+        aliases: &["びょう"],
+        surfaces: &["秒"],
+    },
+    CounterDef {
+        canonical: "さい",
+        aliases: &["さい"],
+        surfaces: &["歳", "才"],
+    },
+    CounterDef {
+        canonical: "ど",
+        aliases: &["ど"],
+        surfaces: &["度"],
+    },
+    CounterDef {
+        canonical: "ばん",
+        aliases: &["ばん"],
+        surfaces: &["番"],
+    },
+    CounterDef {
+        canonical: "えん",
+        aliases: &["えん"],
+        surfaces: &["円"],
+    },
+];
+
+const COUNTER_YOMI_ALIASES: &[&str] = &[
+    "ひき",
+    "びき",
+    "ぴき",
+    "にん",
+    "ほん",
+    "ぼん",
+    "ぽん",
+    "まい",
+    "だい",
+    "かい",
+    "かいめ",
+    "こ",
+    "さつ",
+    "とう",
+    "わ",
+    "ちゃく",
+    "けん",
+    "しゅう",
+    "しゅうかん",
+    "ねん",
+    "かげつ",
+    "にち",
+    "じ",
+    "ふん",
+    "ぷん",
+    "びょう",
+    "さい",
+    "ど",
+    "ばん",
+    "えん",
+];
 
 const KANA_THOUSANDS: [(&str, i64); 11] = [
     ("きゅうせん", 9000),
@@ -349,23 +512,25 @@ pub fn parse_kana_numeric_prefix_before_counter(s: &str) -> Option<NumericPrefix
 }
 
 pub fn counter_yomi_aliases() -> &'static [&'static str] {
-    &COUNTER_YOMI_ALIASES
+    COUNTER_YOMI_ALIASES
 }
 
 pub fn normalize_counter_yomi(yomi: &str) -> Option<&'static str> {
-    match yomi {
-        "ひき" | "びき" | "ぴき" => Some("ひき"),
-        "しゅうかん" => Some("しゅうかん"),
-        _ => None,
+    for def in COUNTER_DEFS {
+        if def.aliases.contains(&yomi) {
+            return Some(def.canonical);
+        }
     }
+    None
 }
 
 pub fn counter_surfaces_for(canonical_yomi: &str) -> Option<&'static [&'static str]> {
-    match canonical_yomi {
-        "ひき" => Some(&COUNTER_SURFACES_HIKI),
-        "しゅうかん" => Some(&COUNTER_SURFACES_SHUKAN),
-        _ => None,
+    for def in COUNTER_DEFS {
+        if def.canonical == canonical_yomi {
+            return Some(def.surfaces);
+        }
     }
+    None
 }
 
 /// 助数詞の user 学習を数字に依存しない形で集約するためのキー正規化。
@@ -473,6 +638,17 @@ mod tests {
             normalize_counter_key_for_lm("0匹/ぜろひき"),
             Some("<NUM>匹/<NUM>ひき".to_string())
         );
-        assert_eq!(normalize_counter_key_for_lm("3人/3にん"), None);
+        assert_eq!(
+            normalize_counter_key_for_lm("3本/3ぼん"),
+            Some("<NUM>本/<NUM>ほん".to_string())
+        );
+        assert_eq!(
+            normalize_counter_key_for_lm("１０分/じゅっぷん"),
+            Some("<NUM>分/<NUM>ふん".to_string())
+        );
+        assert_eq!(
+            normalize_counter_key_for_lm("3人/3にん"),
+            Some("<NUM>人/<NUM>にん".to_string())
+        );
     }
 }
