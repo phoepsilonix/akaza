@@ -25,3 +25,8 @@
     - [前処理]()
       - [漢方薬の読み問題](internals/notes/preproc/kanpoyaku.md)
       - [MeCab 形態素解析](internals/notes/preproc/mecab.md)
+    - [コーパス統計]()
+      - [利用可能な日本語コーパス調査](internals/notes/corpus-stats/available-japanese-corpora.md)
+      - [CC-100 クリーニング戦略](internals/notes/corpus-stats/cc100-cleaning-strategy.md)
+      - [CirrusSearch 日本語コーパス調査](internals/notes/corpus-stats/cirrus-japanese-corpora.md)
+      - [jawiktionary 評価](internals/notes/corpus-stats/jawiktionary-evaluation.md)
