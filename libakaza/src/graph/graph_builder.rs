@@ -4,10 +4,6 @@ use std::rc::Rc;
 use rustc_hash::FxHashSet;
 use std::sync::{Arc, Mutex};
 
-use kelp::{hira2kata, ConvOption};
-use log::trace;
-use regex::Regex;
-
 use crate::graph::lattice_graph::LatticeGraph;
 use crate::graph::segmenter::SegmentationResult;
 use crate::graph::word_node::{WordNode, BOS_TOKEN_KEY, EOS_TOKEN_KEY};
@@ -15,6 +11,8 @@ use crate::kana_kanji::base::KanaKanjiDict;
 use crate::kansuji::int2kanji;
 use crate::lm::base::{SystemBigramLM, SystemUnigramLM};
 use crate::user_side_data::user_data::UserData;
+use kelp::{hira2kata, ConvOption};
+use log::trace;
 
 /// surface が数字+接尾辞の場合、LM lookup 用のキーを `<NUM>` 正規化する。
 /// `libakaza` は `akaza-data` に依存しないため、同等のロジックをインラインで持つ。
@@ -50,7 +48,6 @@ pub struct GraphBuilder<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict
     user_data: Arc<Mutex<UserData>>,
     system_unigram_lm: Rc<U>,
     system_bigram_lm: Rc<B>,
-    number_pattern: Regex,
 }
 
 impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B, KD> {
@@ -61,14 +58,12 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
         system_unigram_lm: Rc<U>,
         system_bigram_lm: Rc<B>,
     ) -> GraphBuilder<U, B, KD> {
-        let number_pattern = Regex::new(r#"^[0-9]+"#).unwrap();
         GraphBuilder {
             system_kana_kanji_dict,
             system_single_term_dict,
             user_data,
             system_unigram_lm,
             system_bigram_lm,
-            number_pattern,
         }
     }
 
@@ -167,16 +162,22 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
                     vec.push(node);
                 }
 
-                // 数字の場合は数字用の動的変換を入れる
-                if self.number_pattern.is_match(segmented_yomi) {
-                    let node = WordNode::new(
-                        (end_pos - segmented_yomi.len()) as i32,
-                        "(*(*(NUMBER-KANSUJI",
-                        segmented_yomi,
-                        None,
-                        true,
-                    );
-                    vec.push(node);
+                // 純粋な数字の場合のみ漢数字候補を静的に生成する
+                if !segmented_yomi.is_empty() && segmented_yomi.bytes().all(|b| b.is_ascii_digit())
+                {
+                    if let Ok(n) = segmented_yomi.parse::<i64>() {
+                        let kansuji = int2kanji(n);
+                        if !seen.contains(&kansuji) {
+                            let node = WordNode::new(
+                                (end_pos - segmented_yomi.len()) as i32,
+                                &kansuji,
+                                segmented_yomi,
+                                None,
+                                true,
+                            );
+                            vec.push(node);
+                        }
+                    }
                 }
 
                 // 数字+かな複合セグメント（例: "90ぎょう"）の処理
