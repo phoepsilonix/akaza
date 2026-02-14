@@ -12,6 +12,7 @@ use crate::graph::lattice_graph::LatticeGraph;
 use crate::graph::segmenter::SegmentationResult;
 use crate::graph::word_node::{WordNode, BOS_TOKEN_KEY, EOS_TOKEN_KEY};
 use crate::kana_kanji::base::KanaKanjiDict;
+use crate::kansuji::int2kanji;
 use crate::lm::base::{SystemBigramLM, SystemUnigramLM};
 use crate::user_side_data::user_data::UserData;
 
@@ -20,19 +21,26 @@ use crate::user_side_data::user_data::UserData;
 ///
 /// 裸の数字（suffix なし）はフォールバックしない。全数字カウント集約により
 /// `<NUM>/<NUM>` のスコアが極端に高くなり、「に→2」「さん→3」等の退行を起こすため。
+///
+/// surface 側は漢字接尾辞を保持し、reading 側はかな読みを保持する。
+/// - `"90行/90ぎょう"` → `"<NUM>行/<NUM>ぎょう"`
 fn normalize_surface_for_lm(key: &str) -> Option<String> {
     let slash_pos = key.find('/')?;
     let surface = &key[..slash_pos];
+    let reading = &key[slash_pos + 1..];
     let digit_end = surface.bytes().take_while(|b| b.is_ascii_digit()).count();
     if digit_end == 0 {
         return None;
     }
-    let suffix = &surface[digit_end..];
-    if suffix.is_empty() {
+    let surface_suffix = &surface[digit_end..];
+    if surface_suffix.is_empty() {
         // 裸の数字はフォールバックしない
         None
     } else {
-        Some(format!("<NUM>{0}/<NUM>{0}", suffix))
+        // reading 側も先頭の数字部分を <NUM> に置換し、かな読みを保持
+        let reading_digit_end = reading.bytes().take_while(|b| b.is_ascii_digit()).count();
+        let reading_suffix = &reading[reading_digit_end..];
+        Some(format!("<NUM>{surface_suffix}/<NUM>{reading_suffix}"))
     }
 }
 
@@ -169,6 +177,94 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> GraphBuilder<U, B
                         true,
                     );
                     vec.push(node);
+                }
+
+                // 数字+かな複合セグメント（例: "90ぎょう"）の処理
+                // 数字部分とかな部分を分離し、かな部分を辞書で変換して候補を生成する
+                {
+                    let digit_end = segmented_yomi
+                        .bytes()
+                        .take_while(|b| b.is_ascii_digit())
+                        .count();
+                    if digit_end > 0 && digit_end < segmented_yomi.len() {
+                        let num_str = &segmented_yomi[..digit_end];
+                        let kana_part = &segmented_yomi[digit_end..];
+                        let start_pos = (end_pos - segmented_yomi.len()) as i32;
+
+                        // かな部分を辞書で検索して漢字候補を取得
+                        if let Some(kanjis) = self.system_kana_kanji_dict.get(kana_part) {
+                            for kanji in &kanjis {
+                                let compound_surface = format!("{}{}", num_str, kanji);
+                                if seen.contains(&compound_surface) {
+                                    continue;
+                                }
+                                // LM key: "90行/90ぎょう" → normalize → "<NUM>行/<NUM>ぎょう"
+                                key_buf.clear();
+                                key_buf.push_str(&compound_surface);
+                                key_buf.push('/');
+                                key_buf.push_str(segmented_yomi);
+                                let word_id_and_score =
+                                    self.system_unigram_lm.find(&key_buf).or_else(|| {
+                                        normalize_surface_for_lm(&key_buf)
+                                            .and_then(|nk| self.system_unigram_lm.find(&nk))
+                                    });
+                                let node = WordNode::new(
+                                    start_pos,
+                                    &compound_surface,
+                                    segmented_yomi,
+                                    word_id_and_score,
+                                    false,
+                                );
+                                vec.push(node);
+                                seen.insert(compound_surface);
+                            }
+                        }
+
+                        // 漢数字候補も追加（例: "九十行"）
+                        if let Ok(n) = num_str.parse::<i64>() {
+                            let kanji_num = int2kanji(n);
+                            if let Some(kanjis) = self.system_kana_kanji_dict.get(kana_part) {
+                                for kanji in &kanjis {
+                                    let kansuji_surface = format!("{}{}", kanji_num, kanji);
+                                    if seen.contains(&kansuji_surface) {
+                                        continue;
+                                    }
+                                    // LM lookup: same normalized key "<NUM>行/<NUM>ぎょう"
+                                    key_buf.clear();
+                                    key_buf.push_str(&kansuji_surface);
+                                    key_buf.push('/');
+                                    key_buf.push_str(segmented_yomi);
+                                    let word_id_and_score =
+                                        self.system_unigram_lm.find(&key_buf).or_else(|| {
+                                            normalize_surface_for_lm(&key_buf)
+                                                .and_then(|nk| self.system_unigram_lm.find(&nk))
+                                        });
+                                    let node = WordNode::new(
+                                        start_pos,
+                                        &kansuji_surface,
+                                        segmented_yomi,
+                                        word_id_and_score,
+                                        false,
+                                    );
+                                    vec.push(node);
+                                    seen.insert(kansuji_surface);
+                                }
+                            }
+                            // かな部分そのままの漢数字候補（例: "九十ぎょう"）
+                            let kansuji_kana = format!("{}{}", kanji_num, kana_part);
+                            if !seen.contains(&kansuji_kana) {
+                                let node = WordNode::new(
+                                    start_pos,
+                                    &kansuji_kana,
+                                    segmented_yomi,
+                                    None,
+                                    true,
+                                );
+                                vec.push(node);
+                                seen.insert(kansuji_kana);
+                            }
+                        }
+                    }
                 }
 
                 // 変換範囲が全体になっていれば single term 辞書を利用する。
@@ -319,11 +415,15 @@ mod tests {
     fn test_normalize_surface_for_lm() {
         assert_eq!(
             normalize_surface_for_lm("1匹/1ひき"),
-            Some("<NUM>匹/<NUM>匹".to_string())
+            Some("<NUM>匹/<NUM>ひき".to_string())
         );
         assert_eq!(
             normalize_surface_for_lm("100円/100えん"),
-            Some("<NUM>円/<NUM>円".to_string())
+            Some("<NUM>円/<NUM>えん".to_string())
+        );
+        assert_eq!(
+            normalize_surface_for_lm("90行/90ぎょう"),
+            Some("<NUM>行/<NUM>ぎょう".to_string())
         );
         // 裸の数字はフォールバックしない（スコア集約による退行を防止）
         assert_eq!(normalize_surface_for_lm("1/1"), None);
