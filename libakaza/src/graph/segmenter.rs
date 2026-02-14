@@ -121,9 +121,20 @@ impl Segmenter {
             }
 
             candidates.clear();
-            let numeric_prefix = parse_numeric_prefix_surface(yomi)
-                .or_else(|| parse_kana_numeric_prefix_before_counter(yomi));
-            if let Some(prefix) = numeric_prefix {
+
+            // ASCII/全角数字プレフィックスの検出（明確なので排他的に処理）
+            let ascii_numeric_prefix = parse_numeric_prefix_surface(yomi);
+            // かな数詞プレフィックスの検出（曖昧性があるので trie 探索と並行）
+            let kana_numeric_prefix = if ascii_numeric_prefix.is_none() {
+                parse_kana_numeric_prefix_before_counter(yomi)
+            } else {
+                None
+            };
+
+            if let Some(prefix) = ascii_numeric_prefix
+                .as_ref()
+                .or(kana_numeric_prefix.as_ref())
+            {
                 // 数字は一つの単語として処理する。
                 let s = &yomi[..prefix.consumed_len];
                 candidates.insert(s.to_string());
@@ -140,13 +151,24 @@ impl Segmenter {
                         }
                     }
                     // 助数詞はコーパス外でも扱いたいので、最小セットを規則で補完する。
+                    // かな数詞パスの場合は完全一致のみ（starts_with だと「じょう」→「じ」誤爆）。
+                    let require_exact = kana_numeric_prefix.is_some();
                     for counter_yomi in counter_yomi_aliases() {
-                        if after_num.starts_with(counter_yomi) {
+                        if require_exact {
+                            if after_num == *counter_yomi {
+                                candidates.insert(format!("{s}{counter_yomi}"));
+                            }
+                        } else if after_num.starts_with(counter_yomi) {
                             candidates.insert(format!("{s}{counter_yomi}"));
                         }
                     }
                 }
-            } else {
+            }
+
+            // かな数詞の場合は曖昧性があるため、trie 探索も並行して行い
+            // Viterbi に両方の解釈を渡す。
+            // ASCII/全角数字の場合は明確なので trie 探索は不要。
+            if ascii_numeric_prefix.is_none() {
                 for trie in &self.tries {
                     let got = trie.lock().unwrap().common_prefix_search(yomi);
                     debug!("Common prefix search: {:?}", got);

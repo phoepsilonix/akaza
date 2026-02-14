@@ -139,38 +139,19 @@ const COUNTER_DEFS: &[CounterDef] = &[
     },
 ];
 
-const COUNTER_YOMI_ALIASES: &[&str] = &[
-    "ひき",
-    "びき",
-    "ぴき",
-    "にん",
-    "ほん",
-    "ぼん",
-    "ぽん",
-    "まい",
-    "だい",
-    "かい",
-    "かいめ",
-    "こ",
-    "さつ",
-    "とう",
-    "わ",
-    "ちゃく",
-    "けん",
-    "しゅう",
-    "しゅうかん",
-    "ねん",
-    "かげつ",
-    "にち",
-    "じ",
-    "ふん",
-    "ぷん",
-    "びょう",
-    "さい",
-    "ど",
-    "ばん",
-    "えん",
-];
+/// COUNTER_DEFS から全エイリアスを集約した配列を返す。
+/// 手動同期の不整合を防ぐため、COUNTER_DEFS を唯一の情報源とする。
+fn collect_counter_yomi_aliases() -> Vec<&'static str> {
+    let mut aliases = Vec::new();
+    for def in COUNTER_DEFS {
+        for alias in def.aliases {
+            if !aliases.contains(alias) {
+                aliases.push(alias);
+            }
+        }
+    }
+    aliases
+}
 
 const KANA_THOUSANDS: [(&str, i64); 11] = [
     ("きゅうせん", 9000),
@@ -492,12 +473,30 @@ pub fn parse_numeric_exact_reading(s: &str) -> Option<i64> {
     parse_kana_number_exact(s)
 }
 
+/// 1文字かな数詞（に, し, ご, く）は助詞や一般語と衝突するため除外対象とする。
+/// 例: 「にほん」→「2+本」と誤解析するのを防ぐ。
+const AMBIGUOUS_SINGLE_CHAR_NUMERALS: &[&str] = &["に", "し", "ご", "く"];
+
+/// かな数詞パスでの助数詞マッチに使う最小文字数。
+/// 1文字助数詞（じ=時, ど=度, こ=個, わ=羽）は曖昧性が高すぎるため、
+/// かな数詞との組み合わせでは除外する。ASCII/全角数字との組み合わせでは有効。
+const MIN_COUNTER_LEN_FOR_KANA_NUMERIC: usize = 2;
+
 pub fn parse_kana_numeric_prefix_before_counter(s: &str) -> Option<NumericPrefix> {
     let mut best: Option<NumericPrefix> = None;
     for (split, _) in s.char_indices().skip(1) {
         let prefix = &s[..split];
         let suffix = &s[split..];
-        if !counter_yomi_aliases().iter().any(|a| suffix.starts_with(a)) {
+        // 助数詞が suffix に完全一致するケースのみマッチする。
+        // starts_with だと「じょう」が「じ」(時) にマッチするような誤爆が起きる。
+        let matched_counter = counter_yomi_aliases()
+            .iter()
+            .any(|a| suffix == *a && a.chars().count() >= MIN_COUNTER_LEN_FOR_KANA_NUMERIC);
+        if !matched_counter {
+            continue;
+        }
+        // 1文字かな数詞のみの場合は誤爆リスクが高いため除外
+        if AMBIGUOUS_SINGLE_CHAR_NUMERALS.contains(&prefix) {
             continue;
         }
         if let Some(value) = parse_kana_number_exact(prefix) {
@@ -512,7 +511,9 @@ pub fn parse_kana_numeric_prefix_before_counter(s: &str) -> Option<NumericPrefix
 }
 
 pub fn counter_yomi_aliases() -> &'static [&'static str] {
-    COUNTER_YOMI_ALIASES
+    use std::sync::OnceLock;
+    static ALIASES: OnceLock<Vec<&'static str>> = OnceLock::new();
+    ALIASES.get_or_init(collect_counter_yomi_aliases)
 }
 
 pub fn normalize_counter_yomi(yomi: &str) -> Option<&'static str> {
@@ -650,5 +651,42 @@ mod tests {
             normalize_counter_key_for_lm("3人/3にん"),
             Some("<NUM>人/<NUM>にん".to_string())
         );
+    }
+
+    /// COUNTER_DEFS の全エイリアスが counter_yomi_aliases() に含まれていることを検証する。
+    #[test]
+    fn test_counter_yomi_aliases_matches_counter_defs() {
+        let aliases = counter_yomi_aliases();
+        for def in COUNTER_DEFS {
+            for alias in def.aliases {
+                assert!(
+                    aliases.contains(alias),
+                    "alias {:?} from COUNTER_DEFS (canonical={:?}) is missing in counter_yomi_aliases()",
+                    alias,
+                    def.canonical
+                );
+            }
+        }
+    }
+
+    /// 1文字かな数詞が助詞・一般語と衝突しないことを検証する。
+    /// 「にほん」→「2+本」、「ごにん」→「5+にん」等の誤爆を防ぐ。
+    #[test]
+    fn test_kana_numeral_no_false_positive_on_common_words() {
+        // 「にほん」は「日本」であり「2本」ではない
+        assert_eq!(parse_kana_numeric_prefix_before_counter("にほん"), None);
+        // 「しまい」は「姉妹/終い」であり「4枚」ではない
+        assert_eq!(parse_kana_numeric_prefix_before_counter("しまい"), None);
+        // 「ごけん」は「語研/ご件」と曖昧だが1文字数詞なのでブロック
+        assert_eq!(parse_kana_numeric_prefix_before_counter("ごけん"), None);
+        // 「くにん」は「苦忍」等であり「9人」ではない
+        assert_eq!(parse_kana_numeric_prefix_before_counter("くにん"), None);
+
+        // 一方、2文字以上のかな数詞は正しく動作する
+        assert!(parse_kana_numeric_prefix_before_counter("さんびき").is_some()); // 3匹
+        assert!(parse_kana_numeric_prefix_before_counter("ぜろほん").is_some()); // 0本
+        assert!(parse_kana_numeric_prefix_before_counter("じゅっぷん").is_some()); // 10分
+        assert!(parse_kana_numeric_prefix_before_counter("にせんえん").is_some());
+        // 2000円
     }
 }
