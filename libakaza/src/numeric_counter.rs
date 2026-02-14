@@ -40,7 +40,7 @@ const COUNTER_DEFS: &[CounterDef] = &[
     CounterDef {
         canonical: "かい",
         aliases: &["かい"],
-        surfaces: &["回"],
+        surfaces: &["回", "階"],
     },
     CounterDef {
         canonical: "かいめ",
@@ -74,8 +74,8 @@ const COUNTER_DEFS: &[CounterDef] = &[
     },
     CounterDef {
         canonical: "けん",
-        aliases: &["けん"],
-        surfaces: &["件"],
+        aliases: &["けん", "げん"],
+        surfaces: &["件", "軒"],
     },
     CounterDef {
         canonical: "しゅう",
@@ -136,6 +136,76 @@ const COUNTER_DEFS: &[CounterDef] = &[
         canonical: "えん",
         aliases: &["えん"],
         surfaces: &["円"],
+    },
+    CounterDef {
+        canonical: "じかん",
+        aliases: &["じかん"],
+        surfaces: &["時間"],
+    },
+    CounterDef {
+        canonical: "にちかん",
+        aliases: &["にちかん"],
+        surfaces: &["日間"],
+    },
+    CounterDef {
+        canonical: "はい",
+        aliases: &["はい", "ぱい"],
+        surfaces: &["杯"],
+    },
+    CounterDef {
+        canonical: "ばい",
+        aliases: &["ばい"],
+        surfaces: &["倍", "杯"],
+    },
+    CounterDef {
+        canonical: "きょく",
+        aliases: &["きょく"],
+        surfaces: &["曲"],
+    },
+    CounterDef {
+        canonical: "もん",
+        aliases: &["もん"],
+        surfaces: &["問"],
+    },
+    CounterDef {
+        canonical: "めい",
+        aliases: &["めい"],
+        surfaces: &["名"],
+    },
+    CounterDef {
+        canonical: "てん",
+        aliases: &["てん"],
+        surfaces: &["点"],
+    },
+    CounterDef {
+        canonical: "ひょう",
+        aliases: &["ひょう"],
+        surfaces: &["票"],
+    },
+    CounterDef {
+        canonical: "つう",
+        aliases: &["つう"],
+        surfaces: &["通"],
+    },
+    CounterDef {
+        canonical: "しょく",
+        aliases: &["しょく"],
+        surfaces: &["食"],
+    },
+    CounterDef {
+        canonical: "わり",
+        aliases: &["わり"],
+        surfaces: &["割"],
+    },
+    CounterDef {
+        canonical: "はく",
+        aliases: &["はく", "ぱく"],
+        surfaces: &["泊"],
+    },
+    CounterDef {
+        canonical: "はつ",
+        aliases: &["はつ", "ぱつ"],
+        surfaces: &["発"],
     },
 ];
 
