@@ -58,8 +58,14 @@ impl<U: SystemUnigramLM, B: SystemBigramLM, KD: KanaKanjiDict> HenkanEngine
         yomi: &str,
         force_ranges: Option<&[Range<usize>]>,
     ) -> Result<Vec<Vec<Candidate>>> {
-        let lattice = self.to_lattice(yomi, force_ranges)?;
-        self.resolve(&lattice)
+        // リランキングを適用するため、k-best で複数パスを取得してリランキング
+        // k=10 で十分な候補パターンを取得し、リランキング後の最良パスを返す
+        let paths = self.convert_k_best(yomi, force_ranges, 10)?;
+        if let Some(best_path) = paths.first() {
+            Ok(best_path.segments.clone())
+        } else {
+            Ok(vec![])
+        }
     }
 
     fn convert_k_best(
@@ -231,5 +237,171 @@ impl BigramWordViterbiEngineBuilder {
 
     fn try_load(model_dir: &str, name: &str) -> Result<String> {
         Ok(model_dir.to_string() + "/" + name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::graph::graph_builder::GraphBuilder;
+    use crate::graph::graph_resolver::GraphResolver;
+    use crate::graph::segmenter::Segmenter;
+    use crate::kana_kanji::hashmap_vec::HashmapVecKanaKanjiDict;
+    use crate::kana_trie::cedarwood_kana_trie::CedarwoodKanaTrie;
+    use crate::lm::base::SystemUnigramLM;
+    use crate::lm::system_bigram::MarisaSystemBigramLMBuilder;
+    use crate::lm::system_unigram_lm::MarisaSystemUnigramLMBuilder;
+    use std::collections::HashMap;
+
+    /// convert メソッドでリランキングが適用されることを確認
+    #[test]
+    fn test_convert_applies_reranking() -> anyhow::Result<()> {
+        // リランキングによって順位が逆転するケースを設定
+        // "このもでる" → Viterbi では "この/も/出る" が選ばれるが (3トークン)、
+        // リランキングでは length_weight により "この/モデル" が選ばれる (2トークン)
+        let dict = HashMap::from([
+            ("この".to_string(), vec!["この".to_string()]),
+            ("も".to_string(), vec!["も".to_string()]),
+            ("でる".to_string(), vec!["出る".to_string()]),
+            ("もでる".to_string(), vec!["モデル".to_string()]),
+        ]);
+
+        let mut unigram_builder = MarisaSystemUnigramLMBuilder::default();
+        unigram_builder.add("この/この", 1.0);
+        unigram_builder.add("も/も", 0.5);
+        unigram_builder.add("出る/でる", 1.0);
+        unigram_builder.add("モデル/もでる", 1.5);
+        unigram_builder.set_total_words(1000);
+        unigram_builder.set_unique_words(100);
+        let system_unigram_lm = unigram_builder.build()?;
+
+        let unigram_map = system_unigram_lm.as_hash_map();
+        let kono_id = unigram_map.get("この/この").unwrap().0;
+        let mo_id = unigram_map.get("も/も").unwrap().0;
+        let deru_id = unigram_map.get("出る/でる").unwrap().0;
+        let model_id = unigram_map.get("モデル/もでる").unwrap().0;
+
+        let mut bigram_builder = MarisaSystemBigramLMBuilder::default();
+        bigram_builder.set_default_edge_cost(5.0);
+        // "この→も→出る" のバイグラムコスト (Viterbi で選ばれるように低く設定)
+        bigram_builder.add(kono_id, mo_id, 0.5);
+        bigram_builder.add(mo_id, deru_id, 0.5);
+        // "この→モデル" のバイグラムコスト
+        bigram_builder.add(kono_id, model_id, 2.0);
+        let system_bigram_lm = bigram_builder.build()?;
+
+        // エンジンを構築
+        let graph_builder = GraphBuilder::new(
+            HashmapVecKanaKanjiDict::new(dict),
+            HashmapVecKanaKanjiDict::new(HashMap::new()),
+            Arc::new(Mutex::new(UserData::default())),
+            Rc::new(system_unigram_lm),
+            Rc::new(system_bigram_lm),
+        );
+
+        let kana_trie = CedarwoodKanaTrie::build(vec![
+            "この".to_string(),
+            "も".to_string(),
+            "でる".to_string(),
+            "もでる".to_string(),
+        ]);
+
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph_resolver = GraphResolver::default();
+
+        let engine = BigramWordViterbiEngine {
+            graph_builder,
+            segmenter,
+            graph_resolver,
+            user_data: Arc::new(Mutex::new(UserData::default())),
+            reranking_weights: ReRankingWeights::default(),
+            skip_bigram_lm: None,
+        };
+
+        // convert を呼び出し（リランキング適用済み）
+        let result = engine.convert("このもでる", None)?;
+
+        // リランキングにより "この/モデル" が選ばれることを確認
+        let text: Vec<String> = result
+            .iter()
+            .filter_map(|segment| segment.first().map(|c| c.surface.clone()))
+            .collect();
+
+        assert_eq!(text.join("/"), "この/モデル");
+
+        Ok(())
+    }
+
+    /// resolve メソッドは Viterbi の結果のみを返すことを確認
+    #[test]
+    fn test_resolve_returns_viterbi_result() -> anyhow::Result<()> {
+        // resolve は低レベル API として Viterbi の結果のみを返す
+        let dict = HashMap::from([
+            ("この".to_string(), vec!["この".to_string()]),
+            ("も".to_string(), vec!["も".to_string()]),
+            ("でる".to_string(), vec!["出る".to_string()]),
+            ("もでる".to_string(), vec!["モデル".to_string()]),
+        ]);
+
+        let mut unigram_builder = MarisaSystemUnigramLMBuilder::default();
+        unigram_builder.add("この/この", 1.0);
+        unigram_builder.add("も/も", 0.5);
+        unigram_builder.add("出る/でる", 1.0);
+        unigram_builder.add("モデル/もでる", 3.0);
+        unigram_builder.set_total_words(1000);
+        unigram_builder.set_unique_words(100);
+        let system_unigram_lm = unigram_builder.build()?;
+
+        let unigram_map = system_unigram_lm.as_hash_map();
+        let kono_id = unigram_map.get("この/この").unwrap().0;
+        let mo_id = unigram_map.get("も/も").unwrap().0;
+        let deru_id = unigram_map.get("出る/でる").unwrap().0;
+
+        let mut bigram_builder = MarisaSystemBigramLMBuilder::default();
+        bigram_builder.set_default_edge_cost(10.0);
+        // Viterbi では「この→も→出る」の方がコストが低くなるように設定
+        bigram_builder.add(kono_id, mo_id, 0.5);
+        bigram_builder.add(mo_id, deru_id, 0.5);
+        let system_bigram_lm = bigram_builder.build()?;
+
+        let graph_builder = GraphBuilder::new(
+            HashmapVecKanaKanjiDict::new(dict),
+            HashmapVecKanaKanjiDict::new(HashMap::new()),
+            Arc::new(Mutex::new(UserData::default())),
+            Rc::new(system_unigram_lm),
+            Rc::new(system_bigram_lm),
+        );
+
+        let kana_trie = CedarwoodKanaTrie::build(vec![
+            "この".to_string(),
+            "も".to_string(),
+            "でる".to_string(),
+            "もでる".to_string(),
+        ]);
+        let segmenter = Segmenter::new(vec![Arc::new(Mutex::new(kana_trie))]);
+        let graph_resolver = GraphResolver::default();
+
+        let engine = BigramWordViterbiEngine {
+            graph_builder,
+            segmenter,
+            graph_resolver,
+            user_data: Arc::new(Mutex::new(UserData::default())),
+            reranking_weights: ReRankingWeights::default(),
+            skip_bigram_lm: None,
+        };
+
+        // to_lattice → resolve を呼び出し（リランキングなし）
+        let lattice = engine.to_lattice("このもでる", None)?;
+        let result = engine.resolve(&lattice)?;
+
+        // Viterbi の結果（"この/も/出る"）が返されることを確認
+        let text: Vec<String> = result
+            .iter()
+            .filter_map(|segment| segment.first().map(|c| c.surface.clone()))
+            .collect();
+
+        assert_eq!(text.join("/"), "この/も/出る");
+
+        Ok(())
     }
 }
