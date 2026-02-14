@@ -237,15 +237,23 @@ const KANA_THOUSANDS: [(&str, i64); 11] = [
     ("しせん", 4000),
 ];
 
-const KANA_HUNDREDS: [(&str, i64); 12] = [
+const KANA_HUNDREDS: [(&str, i64); 20] = [
     ("きゅうひゃく", 900),
+    ("きゅうひゃっ", 900),
     ("はっぴゃく", 800),
+    ("はっぴゃっ", 800),
     ("ななひゃく", 700),
+    ("ななひゃっ", 700),
     ("ろっぴゃく", 600),
+    ("ろっぴゃっ", 600),
     ("ごひゃく", 500),
+    ("ごひゃっ", 500),
     ("よんひゃく", 400),
+    ("よんひゃっ", 400),
     ("さんびゃく", 300),
+    ("さんびゃっ", 300),
     ("にひゃく", 200),
+    ("にひゃっ", 200),
     ("いっぴゃく", 100),
     ("ひゃく", 100),
     ("ひゃっ", 100),
@@ -758,5 +766,93 @@ mod tests {
         assert!(parse_kana_numeric_prefix_before_counter("じゅっぷん").is_some()); // 10分
         assert!(parse_kana_numeric_prefix_before_counter("にせんえん").is_some());
         // 2000円
+    }
+
+    /// 促音便を含むかな数詞+助数詞が正しくパースされることを検証する。
+    /// 例: さんびゃっぴき (300匹), ろっぴゃっぽん (600本)
+    #[test]
+    fn test_kana_numeric_sokuonbin_hundreds() {
+        // さんびゃっぴき = 300匹
+        let result = parse_kana_numeric_prefix_before_counter("さんびゃっぴき");
+        assert_eq!(
+            result,
+            Some(NumericPrefix {
+                value: 300,
+                ascii_digits: "300".to_string(),
+                consumed_len: "さんびゃっ".len()
+            })
+        );
+
+        // ろっぴゃっぴき = 600匹
+        let result = parse_kana_numeric_prefix_before_counter("ろっぴゃっぴき");
+        assert_eq!(
+            result,
+            Some(NumericPrefix {
+                value: 600,
+                ascii_digits: "600".to_string(),
+                consumed_len: "ろっぴゃっ".len()
+            })
+        );
+
+        // はっぴゃっぴき = 800匹
+        let result = parse_kana_numeric_prefix_before_counter("はっぴゃっぴき");
+        assert_eq!(
+            result,
+            Some(NumericPrefix {
+                value: 800,
+                ascii_digits: "800".to_string(),
+                consumed_len: "はっぴゃっ".len()
+            })
+        );
+
+        // にひゃっぴき = 200匹
+        assert_eq!(
+            parse_kana_numeric_prefix_before_counter("にひゃっぴき"),
+            Some(NumericPrefix {
+                value: 200,
+                ascii_digits: "200".to_string(),
+                consumed_len: "にひゃっ".len()
+            })
+        );
+
+        // よんひゃっぴき = 400匹
+        assert_eq!(
+            parse_kana_numeric_prefix_before_counter("よんひゃっぴき"),
+            Some(NumericPrefix {
+                value: 400,
+                ascii_digits: "400".to_string(),
+                consumed_len: "よんひゃっ".len()
+            })
+        );
+
+        // ごひゃっぴき = 500匹
+        assert_eq!(
+            parse_kana_numeric_prefix_before_counter("ごひゃっぴき"),
+            Some(NumericPrefix {
+                value: 500,
+                ascii_digits: "500".to_string(),
+                consumed_len: "ごひゃっ".len()
+            })
+        );
+
+        // ななひゃっぴき = 700匹
+        assert_eq!(
+            parse_kana_numeric_prefix_before_counter("ななひゃっぴき"),
+            Some(NumericPrefix {
+                value: 700,
+                ascii_digits: "700".to_string(),
+                consumed_len: "ななひゃっ".len()
+            })
+        );
+
+        // きゅうひゃっぴき = 900匹
+        assert_eq!(
+            parse_kana_numeric_prefix_before_counter("きゅうひゃっぴき"),
+            Some(NumericPrefix {
+                value: 900,
+                ascii_digits: "900".to_string(),
+                consumed_len: "きゅうひゃっ".len()
+            })
+        );
     }
 }
