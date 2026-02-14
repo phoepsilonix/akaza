@@ -2,10 +2,10 @@
 
 Akaza の言語モデルとシステム辞書は、2つのリポジトリに分かれたパイプラインで構築される。
 
-| リポジトリ | 役割 |
+| ディレクトリ | 役割 |
 |---|---|
-| [akaza-corpus-stats](https://github.com/akaza-im/akaza-corpus-stats) | コーパスの収集・トーカナイズ・統計データ生成 |
-| [akaza-default-model](https://github.com/akaza-im/akaza-default-model) | 統計データからモデルと辞書を構築 |
+| [`corpus-stats/`](../../../corpus-stats/) | コーパスの収集・トーカナイズ・統計データ生成 |
+| [`default-model/`](../../../default-model/) | 統計データからモデルと辞書を構築 |
 
 ## 1. コーパス統計の生成 (akaza-corpus-stats)
 
@@ -28,7 +28,7 @@ Wikipedia は百科事典的な語彙に偏り、日常語（買う・結構・�
 
 weight=0.3 を適用すると実効的な寄与は `1.9 × 0.3 ≒ 0.57 倍`となり、jawiki の統計を基盤としつつ CC-100 で日常語を補強する構成が実現できる。この設定で Good +316、再現率 +0.59% の改善が確認された。
 
-詳細な評価は [akaza-default-model/docs/cc100-weighted-integration.md](https://github.com/akaza-im/akaza-default-model/blob/main/docs/cc100-weighted-integration.md) を参照。
+詳細な評価は [CC-100 重み付き統合レポート](notes/default-model/cc100-weighted-integration.md) を参照。
 
 ### パイプライン
 
@@ -118,6 +118,14 @@ graph TD
     skk_base --> make_dict
     make_dict --> system_dict[SKK-JISYO.akaza<br/>システム辞書]
 ```
+
+### UniDic からのカタカナ語抽出
+
+システム辞書の構築時に、[UniDic](https://clrd.ninjal.ac.jp/unidic/) CSJ（話し言葉コーパス版）の語彙データ (`lex_3_1.csv`) からカタカナ語を抽出してシステム辞書に追加している。
+
+IPAdic はコーパス（Wikipedia・青空文庫）のトーカナイズに使用する辞書であり、語彙のカバー範囲が限定的である。UniDic は国立国語研究所が整備した大規模な辞書で、IPAdic に含まれないカタカナ外来語（例: アグリゲーション、インフラストラクチャー等）を豊富に収録している。これらの語彙をシステム辞書に取り込むことで、カタカナ語の変換カバレッジを補強している。
+
+抽出条件: 表層形が全てカタカナで構成されるエントリのみを対象とし、読み（ひらがな）→ 表層形（カタカナ）の辞書エントリとして登録する。
 
 ### 成果物
 
